@@ -19,6 +19,12 @@ You’ll then have access to the functions:
   `Maybe`), and
 * `UUID4.generate`, which generates a random UUID, conforming to UUID version 4.
 
+## Caveats
+
+UUIDs in version 1 cannot be generated at the moment, and this library depends
+on a as of yet [unmerged feature](https://github.com/carp-lang/Carp/pull/600)
+in Carp.
+
 <hr/>
 
 Have fun!
