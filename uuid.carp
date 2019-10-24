@@ -1,11 +1,69 @@
 (deftype UUID [
-  internal Long
+  internal (Array Byte)
 ])
 
 (defmodule UUID
-  (defn generate []
+  (register xtob (Fn [String Int Int] Byte) "strtol")
+
+  (def invalid 0)
+  (def rfc4122 1)
+  (def reserved 2)
+  (def microsoft 3)
+  (def future 4)
+
+  (def indices [0 2 4 6 9 11 14 16 19 21 24 26 28 30 32 34])
+
+  (defn str [uuid]
+    (let [a (internal uuid)]
+      (fmt "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x"
+           @(Array.nth a 0) @(Array.nth a 1) @(Array.nth a 2) @(Array.nth a 3)
+           @(Array.nth a 4) @(Array.nth a 5) @(Array.nth a 6) @(Array.nth a 7)
+           @(Array.nth a 8) @(Array.nth a 9) @(Array.nth a 10)
+           @(Array.nth a 11) @(Array.nth a 12) @(Array.nth a 13)
+           @(Array.nth a 14) @(Array.nth a 15)
+      ))
   )
 
-  (defn str []
+  (defn version [uuid]
+    (Byte.bit-shift-right @(Array.nth (internal uuid) 6) 4b))
+
+  (defn variant [uuid]
+    (let [eighth @(Array.nth (internal uuid) 8)]
+      (cond
+        (= 128b (Byte.bit-and eighth 192b)) rfc4122
+        (= 192b (Byte.bit-and eighth 224b)) microsoft
+        (= 224b (Byte.bit-and eighth 224b)) future
+        reserved)))
+
+  (defn valid? [s]
+    (Pattern.matches? #"\x\x\x\x\x\x\x\x\-\x\x\x\x\-\x\x\x\x\-\x\x\x\x\-\x\x\x\x\x\x\x\x\x\x\x\x" s))
+
+  (private indices)
+  (hidden indices)
+  (doc inidices "The indices into the string that we want to extract")
+
+  (defn parse [s]
+    (if (valid? s)
+      (let-do [a (Array.replicate 16 &0b)]
+        (for [i 0 (Array.length &indices)]
+          (Array.aset! &a i (xtob (substring s @(Array.nth &indices i)
+                                               (+ @(Array.nth &indices i) 2)) 0 16)))
+        (Maybe.Just (UUID.init a)))
+      (Maybe.Nothing))
+  )
+
+  (defn = [a b] (= (internal a) (internal b)))
+)
+
+(defmodule UUIDCopy
+  (defn = [a b] (= (UUID.internal &a) (UUID.internal &b)))
+)
+
+(defmodule UUID4
+  (defn generate []
+    (let-do [a (Array.repeat 16 &Byte.random)]
+      (Array.aset! &a 6 (Byte.bit-or (Byte.bit-and @(Array.nth &a 6) 15b) 64b))
+      (Array.aset! &a 8 (Byte.bit-or (Byte.bit-and @(Array.nth &a 6) 63b) 128b))
+      (UUID.init a))
   )
 )
