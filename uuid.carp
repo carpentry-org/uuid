@@ -1,0 +1,11 @@
+(deftype UUID [
+  internal Long
+])
+
+(defmodule UUID
+  (defn generate []
+  )
+
+  (defn str []
+  )
+)

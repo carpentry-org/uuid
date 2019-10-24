@@ -1,0 +1,18 @@
+(load "uuid.carp")
+
+(load "Test.carp")
+
+(use-all Test UUID)
+
+(deftest test
+  (assert-equal test
+                ..
+                (generate)
+                "generate works"
+  )
+  (assert-equal test
+                ..
+                (str (generate))
+                "stringification works"
+  )
+)
