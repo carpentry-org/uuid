@@ -3,6 +3,8 @@
 ])
 
 (defmodule UUID
+  (use-all Array Byte)
+
   (register xtob (Fn [String Int Int] Byte) "strtol")
 
   (def invalid 0)
@@ -16,25 +18,24 @@
   (defn str [uuid]
     (let [a (internal uuid)]
       (fmt "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x"
-           @(Array.unsafe-nth a 0) @(Array.unsafe-nth a 1) @(Array.unsafe-nth a 2)
-           @(Array.unsafe-nth a 3) @(Array.unsafe-nth a 4) @(Array.unsafe-nth a 5)
-           @(Array.unsafe-nth a 6) @(Array.unsafe-nth a 7) @(Array.unsafe-nth a 8)
-           @(Array.unsafe-nth a 9) @(Array.unsafe-nth a 10)
-           @(Array.unsafe-nth a 11) @(Array.unsafe-nth a 12)
-           @(Array.unsafe-nth a 13) @(Array.unsafe-nth a 14)
-           @(Array.unsafe-nth a 15)
+           @(unsafe-nth a 0) @(unsafe-nth a 1) @(unsafe-nth a 2)
+           @(unsafe-nth a 3) @(unsafe-nth a 4) @(unsafe-nth a 5)
+           @(unsafe-nth a 6) @(unsafe-nth a 7) @(unsafe-nth a 8)
+           @(unsafe-nth a 9) @(unsafe-nth a 10) @(unsafe-nth a 11)
+           @(unsafe-nth a 12) @(unsafe-nth a 13) @(unsafe-nth a 14)
+           @(unsafe-nth a 15)
       ))
   )
 
   (defn version [uuid]
-    (Byte.bit-shift-right @(Array.unsafe-nth (internal uuid) 6) 4b))
+    (bit-shift-right @(unsafe-nth (internal uuid) 6) 4b))
 
   (defn variant [uuid]
-    (let [eighth @(Array.unsafe-nth (internal uuid) 8)]
+    (let [eighth @(unsafe-nth (internal uuid) 8)]
       (cond
-        (= 128b (Byte.bit-and eighth 192b)) rfc4122
-        (= 192b (Byte.bit-and eighth 224b)) microsoft
-        (= 224b (Byte.bit-and eighth 224b)) future
+        (= 128b (bit-and eighth 192b)) rfc4122
+        (= 192b (bit-and eighth 224b)) microsoft
+        (= 224b (bit-and eighth 224b)) future
         reserved)))
 
   (defn valid? [s]
@@ -42,14 +43,15 @@
 
   (private indices)
   (hidden indices)
-  (doc inidices "The indices into the string that we want to extract")
+  (doc indices "The indices into the string that we want to extract")
 
+  (doc parse "parses a string into a `UUID`; returns nothing if it fails.")
   (defn parse [s]
     (if (valid? s)
-      (let-do [a (Array.replicate 16 &0b)]
-        (for [i 0 (Array.length &indices)]
-          (Array.aset! &a i (xtob (substring s @(Array.unsafe-nth &indices i)
-                                               (+ @(Array.unsafe-nth &indices i) 2))
+      (let-do [a (replicate 16 &0b)]
+        (for [i 0 (length &indices)]
+          (aset! &a i (xtob (substring s @(unsafe-nth &indices i)
+                                          (+ @(unsafe-nth &indices i) 2))
                                   0 16)))
         (Maybe.Just (UUID.init a)))
       (Maybe.Nothing))
@@ -63,10 +65,62 @@
 )
 
 (defmodule UUID4
+  (use-all Array Byte)
   (defn generate []
-    (let-do [a (Array.repeat 16 &Byte.random)]
-      (Array.aset! &a 6 (Byte.bit-or (Byte.bit-and @(Array.unsafe-nth &a 6) 15b) 64b))
-      (Array.aset! &a 8 (Byte.bit-or (Byte.bit-and @(Array.unsafe-nth &a 6) 63b) 128b))
+    (let-do [a (repeat 16 &random)]
+      (aset! &a 6 (bit-or (bit-and @(unsafe-nth &a 6) 15b) 64b))
+      (aset! &a 8 (bit-or (bit-and @(unsafe-nth &a 6) 63b) 128b))
       (UUID.init a))
   )
+)
+
+(defmodule UUID1
+  (use-all Array Int Long Byte)
+
+  (def clock-seq 0)
+  (def slast 0l)
+
+  (defn set-clock-seq [seq]
+    (do
+      (when (= seq -1)
+        (set! seq (bit-or
+                      (bit-shift-left (to-int (Byte.random)) 8)
+                      (to-int (Byte.random)))))
+      (let-do [old clock-seq]
+        (set! clock-seq (bit-or
+                            (bit-and seq 16383)
+                            32768))
+        (when (/= old clock-seq) (set! slast 0l)))))
+
+  (defn get-time []
+    (do
+      (when (= clock-seq 0) (set-clock-seq -1))
+      (let-do [now (System.nanotime)]
+        (when (<= now slast)
+          (set! clock-seq (bit-or
+                              (bit-and (inc clock-seq) 16383)
+                              32768)))
+        (set! slast now)
+        now)))
+
+  ; TODO: actually get hardware interfaces (we’re only adhering to 4.5 here,
+  ; generating random values)
+  (defn generate []
+    (let-do [t (get-time)
+             tl (to-int (bit-and t 4294967295l))
+             tm (to-int (bit-and (bit-shift-right t 32l) 65535l))
+             th (to-int (bit-or (bit-and (bit-shift-right t 48l) 4095l) 4096l))
+             a (allocate 16)]
+      (aset! &a 0 (from-int (bit-shift-right tl 24)))
+      (aset! &a 1 (from-int (bit-and (bit-shift-right tl 16) 255)))
+      (aset! &a 2 (from-int (bit-and (bit-shift-right tl 8) 255)))
+      (aset! &a 3 (from-int (bit-and tl 255)))
+      (aset! &a 4 (from-int (bit-and (bit-shift-right tm 8) 255)))
+      (aset! &a 5 (from-int (bit-and tm 255)))
+      (aset! &a 6 (from-int (bit-and (bit-shift-right th 8) 255)))
+      (aset! &a 7 (from-int (bit-and th 255)))
+      (aset! &a 8 (from-int (bit-and (bit-shift-right clock-seq 8) 255)))
+      (aset! &a 9 (from-int (bit-and clock-seq 255)))
+      (for [i 0 5] (aset! &a (+ 10 i) (random)))
+      (UUID.init a)))
 )

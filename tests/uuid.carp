@@ -22,6 +22,16 @@
                 "UUID4.generate works II"
   )
   (assert-equal test
+                1b
+                (version &(UUID1.generate))
+                "UUID1.generate works I"
+  )
+  (assert-equal test
+                UUID.rfc4122
+                (variant &(UUID1.generate))
+                "UUID1.generate works II"
+  )
+  (assert-equal test
                 &(Maybe.Just (init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
                 &(parse "00010203-0405-0607-0809-0a0b0c0d0e0f")
                 "parsing works I"
