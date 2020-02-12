@@ -50,8 +50,8 @@
     (if (valid? s)
       (let-do [a (replicate 16 &0b)]
         (for [i 0 (length &indices)]
-          (aset! &a i (xtob (substring s @(unsafe-nth &indices i)
-                                          (+ @(unsafe-nth &indices i) 2))
+          (aset! &a i (xtob (slice s @(unsafe-nth &indices i)
+                                     (+ @(unsafe-nth &indices i) 2))
                                   0 16)))
         (Maybe.Just (UUID.init a)))
       (Maybe.Nothing))
