@@ -26,6 +26,7 @@
            @(unsafe-nth a 15)
       ))
   )
+  (implements str UUID.str)
 
   (defn version [uuid]
     (bit-shift-right @(unsafe-nth (internal uuid) 6) 4b))
@@ -58,10 +59,12 @@
   )
 
   (defn = [a b] (= (internal a) (internal b)))
+  (implements = UUID.=)
 )
 
 (defmodule UUIDCopy
   (defn = [a b] (= (UUID.internal &a) (UUID.internal &b)))
+  (implements = UUIDCopy.=)
 )
 
 (defmodule UUID4

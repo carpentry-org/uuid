@@ -8,7 +8,7 @@ generatable in version 1 and 4 for now.
 You’ll be able to pull in the library using:
 
 ```clojure
-(load "git@github.com:carpentry-org/uuid@0.0.4")
+(load "git@github.com:carpentry-org/uuid@0.0.5")
 ```
 
 You’ll then have access to the functions:
