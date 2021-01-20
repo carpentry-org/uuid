@@ -1,6 +1,7 @@
 (deftype UUID [
   internal (Array Byte)
 ])
+(derive UUID =)
 
 (defmodule UUID
   (use-all Array Byte)
@@ -57,13 +58,10 @@
         (Maybe.Just (UUID.init a)))
       (Maybe.Nothing))
   )
-
-  (defn = [a b] (= (internal a) (internal b)))
-  (implements = UUID.=)
 )
 
 (defmodule UUIDCopy
-  (defn = [a b] (= (UUID.internal &a) (UUID.internal &b)))
+  (defn = [a b] (UUID.= &a &b))
   (implements = UUIDCopy.=)
 )
 
