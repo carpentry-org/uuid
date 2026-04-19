@@ -96,7 +96,7 @@
   (defn get-time []
     (do
       (when (= clock-seq 0) (set-clock-seq -1))
-      (let-do [now (System.nanotime)]
+      (let-do [now (to-long (System.nanotime))]
         (when (<= now slast)
           (set! clock-seq (bit-or
                               (bit-and (inc clock-seq) 16383)
