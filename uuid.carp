@@ -1,6 +1,4 @@
-(deftype UUID [
-  internal (Array Byte)
-])
+(deftype UUID [internal (Array Byte)])
 (derive UUID =)
 
 (defmodule UUID
@@ -18,19 +16,27 @@
 
   (defn str [uuid]
     (let [a (internal uuid)]
-      (fmt "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x"
-           @(unsafe-nth a 0) @(unsafe-nth a 1) @(unsafe-nth a 2)
-           @(unsafe-nth a 3) @(unsafe-nth a 4) @(unsafe-nth a 5)
-           @(unsafe-nth a 6) @(unsafe-nth a 7) @(unsafe-nth a 8)
-           @(unsafe-nth a 9) @(unsafe-nth a 10) @(unsafe-nth a 11)
-           @(unsafe-nth a 12) @(unsafe-nth a 13) @(unsafe-nth a 14)
-           @(unsafe-nth a 15)
-      ))
-  )
+      (fmt
+        "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x"
+        @(unsafe-nth a 0)
+        @(unsafe-nth a 1)
+        @(unsafe-nth a 2)
+        @(unsafe-nth a 3)
+        @(unsafe-nth a 4)
+        @(unsafe-nth a 5)
+        @(unsafe-nth a 6)
+        @(unsafe-nth a 7)
+        @(unsafe-nth a 8)
+        @(unsafe-nth a 9)
+        @(unsafe-nth a 10)
+        @(unsafe-nth a 11)
+        @(unsafe-nth a 12)
+        @(unsafe-nth a 13)
+        @(unsafe-nth a 14)
+        @(unsafe-nth a 15))))
   (implements str UUID.str)
 
-  (defn version [uuid]
-    (bit-shift-right @(unsafe-nth (internal uuid) 6) 4b))
+  (defn version [uuid] (bit-shift-right @(unsafe-nth (internal uuid) 6) 4b))
 
   (defn variant [uuid]
     (let [eighth @(unsafe-nth (internal uuid) 8)]
@@ -41,7 +47,9 @@
         reserved)))
 
   (defn valid? [s]
-    (Pattern.matches? #"\x\x\x\x\x\x\x\x\-\x\x\x\x\-\x\x\x\x\-\x\x\x\x\-\x\x\x\x\x\x\x\x\x\x\x\x" s))
+    (Pattern.matches?
+      #"\x\x\x\x\x\x\x\x\-\x\x\x\x\-\x\x\x\x\-\x\x\x\x\-\x\x\x\x\x\x\x\x\x\x\x\x"
+      s))
 
   (private indices)
   (hidden indices)
@@ -52,18 +60,17 @@
     (if (valid? s)
       (let-do [a (replicate 16 &0b)]
         (for [i 0 (length &indices)]
-          (aset! &a i (xtob (slice s @(unsafe-nth &indices i)
-                                     (+ @(unsafe-nth &indices i) 2))
-                                  0 16)))
+          (aset!
+            &a
+            i
+            (xtob
+              (slice s @(unsafe-nth &indices i) (+ @(unsafe-nth &indices i) 2))
+              0
+              16)))
         (Maybe.Just (UUID.init a)))
-      (Maybe.Nothing))
-  )
-)
+      (Maybe.Nothing))))
 
-(defmodule UUIDCopy
-  (defn = [a b] (UUID.= &a &b))
-  (implements = UUIDCopy.=)
-)
+(defmodule UUIDCopy (defn = [a b] (UUID.= &a &b)) (implements = UUIDCopy.=))
 
 (defmodule UUID4
   (use-all Array Byte)
@@ -71,9 +78,7 @@
     (let-do [a (repeat 16 &random)]
       (aset! &a 6 (bit-or (bit-and @(unsafe-nth &a 6) 15b) 64b))
       (aset! &a 8 (bit-or (bit-and @(unsafe-nth &a 6) 63b) 128b))
-      (UUID.init a))
-  )
-)
+      (UUID.init a))))
 
 (defmodule UUID1
   (use-all Array Int Long Byte)
@@ -84,13 +89,13 @@
   (defn set-clock-seq [seq]
     (do
       (when (= seq -1)
-        (set! seq (bit-or
-                      (bit-shift-left (to-int (Byte.random)) 8)
-                      (to-int (Byte.random)))))
+        (set!
+          seq
+          (bit-or
+            (bit-shift-left (to-int (Byte.random)) 8)
+            (to-int (Byte.random)))))
       (let-do [old clock-seq]
-        (set! clock-seq (bit-or
-                            (bit-and seq 16383)
-                            32768))
+        (set! clock-seq (bit-or (bit-and seq 16383) 32768))
         (when (/= old clock-seq) (set! slast 0l)))))
 
   (defn get-time []
@@ -98,9 +103,7 @@
       (when (= clock-seq 0) (set-clock-seq -1))
       (let-do [now (to-long (System.nanotime))]
         (when (<= now slast)
-          (set! clock-seq (bit-or
-                              (bit-and (inc clock-seq) 16383)
-                              32768)))
+          (set! clock-seq (bit-or (bit-and (inc clock-seq) 16383) 32768)))
         (set! slast now)
         now)))
 
@@ -123,5 +126,4 @@
       (aset! &a 8 (from-int (bit-and (bit-shift-right clock-seq 8) 255)))
       (aset! &a 9 (from-int (bit-and clock-seq 255)))
       (for [i 0 5] (aset! &a (+ 10 i) (random)))
-      (UUID.init a)))
-)
+      (UUID.init a))))
