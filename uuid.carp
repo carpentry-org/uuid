@@ -16,24 +16,23 @@
 
   (defn str [uuid]
     (let [a (internal uuid)]
-      (fmt
-        "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x"
-        @(unsafe-nth a 0)
-        @(unsafe-nth a 1)
-        @(unsafe-nth a 2)
-        @(unsafe-nth a 3)
-        @(unsafe-nth a 4)
-        @(unsafe-nth a 5)
-        @(unsafe-nth a 6)
-        @(unsafe-nth a 7)
-        @(unsafe-nth a 8)
-        @(unsafe-nth a 9)
-        @(unsafe-nth a 10)
-        @(unsafe-nth a 11)
-        @(unsafe-nth a 12)
-        @(unsafe-nth a 13)
-        @(unsafe-nth a 14)
-        @(unsafe-nth a 15))))
+      (fmt "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x"
+           @(unsafe-nth a 0)
+           @(unsafe-nth a 1)
+           @(unsafe-nth a 2)
+           @(unsafe-nth a 3)
+           @(unsafe-nth a 4)
+           @(unsafe-nth a 5)
+           @(unsafe-nth a 6)
+           @(unsafe-nth a 7)
+           @(unsafe-nth a 8)
+           @(unsafe-nth a 9)
+           @(unsafe-nth a 10)
+           @(unsafe-nth a 11)
+           @(unsafe-nth a 12)
+           @(unsafe-nth a 13)
+           @(unsafe-nth a 14)
+           @(unsafe-nth a 15))))
   (implements str UUID.str)
 
   (defn version [uuid] (bit-shift-right @(unsafe-nth (internal uuid) 6) 4b))
@@ -47,8 +46,7 @@
         reserved)))
 
   (defn valid? [s]
-    (Pattern.matches?
-      #"\x\x\x\x\x\x\x\x\-\x\x\x\x\-\x\x\x\x\-\x\x\x\x\-\x\x\x\x\x\x\x\x\x\x\x\x"
+    (Pattern.matches? #"\x\x\x\x\x\x\x\x\-\x\x\x\x\-\x\x\x\x\-\x\x\x\x\-\x\x\x\x\x\x\x\x\x\x\x\x"
       s))
 
   (private indices)
@@ -60,13 +58,13 @@
     (if (valid? s)
       (let-do [a (replicate 16 &0b)]
         (for [i 0 (length &indices)]
-          (aset!
-            &a
-            i
-            (xtob
-              (slice s @(unsafe-nth &indices i) (+ @(unsafe-nth &indices i) 2))
-              0
-              16)))
+          (aset! &a
+                 i
+                 (xtob (slice s
+                     @(unsafe-nth &indices i)
+                     (+ @(unsafe-nth &indices i) 2))
+                   0
+                   16)))
         (Maybe.Just (UUID.init a)))
       (Maybe.Nothing))))
 
@@ -89,11 +87,9 @@
   (defn set-clock-seq [seq]
     (do
       (when (= seq -1)
-        (set!
-          seq
-          (bit-or
-            (bit-shift-left (to-int (Byte.random)) 8)
-            (to-int (Byte.random)))))
+        (set! seq
+              (bit-or (bit-shift-left (to-int (Byte.random)) 8)
+                (to-int (Byte.random)))))
       (let-do [old clock-seq]
         (set! clock-seq (bit-or (bit-and seq 16383) 32768))
         (when (/= old clock-seq) (set! slast 0l)))))
