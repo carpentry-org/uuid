@@ -80,7 +80,7 @@
   (defn generate []
     (let-do [a (repeat 16 &random)]
       (aset! &a 6 (bit-or (bit-and @(unsafe-nth &a 6) 15b) 64b))
-      (aset! &a 8 (bit-or (bit-and @(unsafe-nth &a 6) 63b) 128b))
+      (aset! &a 8 (bit-or (bit-and @(unsafe-nth &a 8) 63b) 128b))
       (UUID.init a))))
 
 (defmodule UUID1
