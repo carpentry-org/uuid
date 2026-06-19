@@ -53,7 +53,6 @@
 
   (private indices)
   (hidden indices)
-  (doc indices "The indices into the string that we want to extract")
 
   (doc parse "parses a string into a `UUID`; returns nothing if it fails.")
   (defn parse [s]
