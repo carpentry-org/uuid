@@ -45,6 +45,21 @@
         (= 224b (bit-and eighth 224b)) future
         reserved)))
 
+  (doc < "compares two UUIDs as unsigned, big-endian 128-bit integers, i.e.
+byte by byte from the most significant. For version-7 UUIDs this orders them
+by creation time, so they sort chronologically.")
+  (defn < [a b]
+    (let-do [aa (internal a)
+             ba (internal b)
+             ord 0]
+      (for [i 0 16]
+        (when (Int.= ord 0)
+          (let [x @(unsafe-nth aa i)
+                y @(unsafe-nth ba i)]
+            (cond (Byte.< x y) (set! ord -1) (Byte.< y x) (set! ord 1) ()))))
+      (Int.= ord -1)))
+  (implements < UUID.<)
+
   (defn valid? [s]
     (and (= (String.length s) 36)
          (Pattern.matches?
@@ -128,3 +143,79 @@
       (aset! &a 9 (from-int (bit-and clock-seq 255)))
       (for [i 0 5] (aset! &a (+ 10 i) (random)))
       (UUID.init a))))
+
+(defmodule UUID7
+  (use-all Array Byte)
+
+  ; `Long` is only 32-bit on some targets, so the 48-bit timestamp math is done
+  ; in `Uint64` (which `System.nanotime` already returns); only byte-sized
+  ; values ever cross into `Int`/`Byte`.
+  (def last-ms (Uint64.zero))
+  (private last-ms)
+  (hidden last-ms)
+
+  (def counter 0)
+  (private counter)
+  (hidden counter)
+
+  ; an 11-bit random counter seed; the 12th counter bit is kept clear so there
+  ; is room to increment within a millisecond before the counter overflows.
+  (private next-seed)
+  (hidden next-seed)
+  (defn next-seed []
+    (Int.bit-and
+      (Int.bit-or
+        (Int.bit-shift-left (to-int (Byte.random)) 8)
+        (to-int (Byte.random)))
+      2047))
+
+  ; the byte at bit offset `shift` of the `Uint64` `n`. `shift` is a small `Int`,
+  ; so the masked value is in [0, 255] and survives the conversion through `Long`.
+  (private byte-at)
+  (hidden byte-at)
+  (defn byte-at [n shift]
+    (Byte.from-int
+      (Long.to-int
+        (Uint64.to-long
+          (Uint64.bit-and
+            (Uint64.bit-shift-right n (Uint64.from-long (Long.from-int shift)))
+            (Uint64.from-long 255l))))))
+
+  (doc generate "generates a new version-7 UUID (RFC 9562): a 48-bit Unix
+millisecond timestamp, a 12-bit monotonic counter, and 62 random bits.
+Successive UUIDs always compare in creation order under `UUID.<`, even when
+generated within the same millisecond.")
+  (defn generate []
+    (let-do [now (Uint64./ (System.nanotime) (Uint64.from-long 1000000l))]
+      (if (Uint64.> now last-ms)
+        (do (set! last-ms now) (set! counter (next-seed)))
+        (do
+          (set! counter (Int.inc counter))
+          (when-do (Int.> counter 4095)
+            (set! last-ms (Uint64.+ last-ms (Uint64.from-long 1l)))
+            (set! counter (next-seed)))))
+      (let-do [a (repeat 16 &random)]
+        (for [i 0 6] (aset! &a i (byte-at last-ms (Int.* 8 (Int.- 5 i)))))
+        (aset! &a
+               6
+               (Byte.from-int
+                 (Int.bit-or 112
+                             (Int.bit-and (Int.bit-shift-right counter 8) 15))))
+        (aset! &a 7 (Byte.from-int (Int.bit-and counter 255)))
+        (aset! &a
+               8
+               (Byte.from-int
+                 (Int.bit-or 128 (Int.bit-and (to-int (Byte.random)) 63))))
+        (UUID.init a))))
+
+  (doc timestamp "extracts the 48-bit Unix millisecond timestamp from a
+version-7 UUID, as a `Uint64`.")
+  (defn timestamp [uuid]
+    (let-do [a (UUID.internal uuid)
+             ms (Uint64.zero)]
+      (for [i 0 6]
+        (set! ms
+              (Uint64.bit-or
+                (Uint64.bit-shift-left ms (Uint64.from-long 8l))
+                (Uint64.from-long (Long.from-int (to-int @(unsafe-nth a i)))))))
+      ms)))
