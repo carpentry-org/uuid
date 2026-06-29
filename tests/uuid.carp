@@ -4,6 +4,22 @@
 
 (use-all Test UUID)
 
+; generate two v7 UUIDs in sequence and check they sort in creation order. The
+; binding order matters, so this cannot be inlined as two argument expressions.
+(defn v7-monotonic? []
+  (let-do [u1 (UUID7.generate)
+           u2 (UUID7.generate)] (UUID.< &u1 &u2)))
+
+; the timestamp read back out of a fresh v7 UUID should be within ~2s of now.
+; the comparison avoids Uint64 underflow by subtracting in the larger direction.
+(defn v7-timestamp-close? []
+  (let-do [u (UUID7.generate)
+           ts (UUID7.timestamp &u)
+           now (Uint64./ (System.nanotime) (Uint64.from-long 1000000l))]
+    (if (Uint64.> now ts)
+      (Uint64.< (Uint64.- now ts) (Uint64.from-long 2000l))
+      (Uint64.< (Uint64.- ts now) (Uint64.from-long 2000l)))))
+
 (deftest test
   (assert-equal test
     "00010203-0405-0607-0809-0a0b0c0d0e0f"
@@ -29,4 +45,21 @@
     "prefixed UUID is rejected")
   (assert-false test
     (valid? "00000000-0000-0000-0000-000000000000suffix")
-    "suffixed UUID is rejected"))
+    "suffixed UUID is rejected")
+  (assert-equal test
+    7b
+    (version &(UUID7.generate))
+    "UUID7.generate sets version 7")
+  (assert-equal test
+    UUID.rfc4122
+    (variant &(UUID7.generate))
+    "UUID7.generate sets the RFC 4122 variant")
+  (assert-true test
+    (valid? &(str &(UUID7.generate)))
+    "UUID7.generate produces a structurally valid UUID")
+  (assert-true test
+    (v7-monotonic?)
+    "successive UUID7.generate results are strictly ordered")
+  (assert-true test
+    (v7-timestamp-close?)
+    "UUID7.timestamp round-trips to within a second of now"))
