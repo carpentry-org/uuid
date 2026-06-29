@@ -20,6 +20,12 @@
       (Uint64.< (Uint64.- now ts) (Uint64.from-long 2000l))
       (Uint64.< (Uint64.- ts now) (Uint64.from-long 2000l)))))
 
+; a UUID must be usable as a Map key, which requires a hash implementation.
+(defn uuid-map-roundtrip? []
+  (let [u (init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b])
+        m (Map.put (Map.create) &u &42)]
+    (= &(Maybe.Just 42) &(Map.get-maybe &m &u))))
+
 (deftest test
   (assert-equal test
     "00010203-0405-0607-0809-0a0b0c0d0e0f"
@@ -62,4 +68,9 @@
     "successive UUID7.generate results are strictly ordered")
   (assert-true test
     (v7-timestamp-close?)
-    "UUID7.timestamp round-trips to within a second of now"))
+    "UUID7.timestamp round-trips to within a second of now")
+  (assert-equal test
+    (UUID.hash &(init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
+    (UUID.hash &(init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
+    "equal UUIDs hash equally")
+  (assert-true test (uuid-map-roundtrip?) "a UUID can be used as a Map key"))
