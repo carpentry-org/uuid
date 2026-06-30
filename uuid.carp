@@ -35,6 +35,16 @@
         @(unsafe-nth a 15))))
   (implements str UUID.str)
 
+  (doc hash "hashes a `UUID` so it can be used as a key in a `Map` or `Set`.
+
+Hashes the 16 underlying bytes directly, so it allocates nothing.")
+  (defn hash [uuid]
+    (let-do [a (internal uuid)
+             h 5381]
+      (for [i 0 (length a)] (set! h (+ (* h 33) (to-int @(unsafe-nth a i)))))
+      (Int.abs h)))
+  (implements hash UUID.hash)
+
   (defn version [uuid] (bit-shift-right @(unsafe-nth (internal uuid) 6) 4b))
 
   (defn variant [uuid]
