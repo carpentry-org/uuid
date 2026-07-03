@@ -31,6 +31,10 @@
 (defn almost-max []
   (let-do [a @(UUID.internal &(UUID.max))] (Array.aset! &a 15 0b) (UUID.init a)))
 
+; an arbitrary UUID that sits strictly between the Nil and Max extremes.
+(defn sample []
+  (UUID.init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
+
 (deftest test
   (assert-equal test
     "00010203-0405-0607-0809-0a0b0c0d0e0f"
@@ -108,4 +112,33 @@
     &(Maybe.Just (UUID.max))
     &(parse "ffffffff-ffff-ffff-ffff-ffffffffffff")
     "the Max UUID round-trips through parse")
-  (assert-equal test &(UUID.nil) &(the UUID (zero)) "zero yields the Nil UUID"))
+  (assert-equal test &(UUID.nil) &(the UUID (zero)) "zero yields the Nil UUID")
+
+  ; comparison operators, exercised against the Nil and Max extremes and a
+  ; sample in between.
+  (assert-true test
+    (UUID.> &(UUID.max) &(UUID.nil))
+    "> holds when the left UUID sorts after the right")
+  (assert-true test
+    (UUID.> &(sample) &(UUID.nil))
+    "> holds against a non-extreme UUID")
+  (assert-false test
+    (UUID.> &(UUID.nil) &(UUID.max))
+    "> rejects a UUID that sorts before")
+  (assert-false test
+    (UUID.> &(sample) &(sample))
+    "> is strict, so equal UUIDs are not greater")
+  (assert-true test
+    (UUID.<= &(UUID.nil) &(UUID.max))
+    "<= holds when the left UUID sorts before")
+  (assert-true test (UUID.<= &(sample) &(sample)) "<= holds for equal UUIDs")
+  (assert-false test
+    (UUID.<= &(UUID.max) &(UUID.nil))
+    "<= rejects a UUID that sorts after")
+  (assert-true test
+    (UUID.>= &(UUID.max) &(UUID.nil))
+    ">= holds when the left UUID sorts after")
+  (assert-true test (UUID.>= &(sample) &(sample)) ">= holds for equal UUIDs")
+  (assert-false test
+    (UUID.>= &(UUID.nil) &(UUID.max))
+    ">= rejects a UUID that sorts before"))

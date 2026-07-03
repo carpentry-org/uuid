@@ -97,6 +97,16 @@ by creation time, so they sort chronologically.")
       (Int.= ord -1)))
   (implements < UUID.<)
 
+  (doc > "checks whether the UUID `a` sorts after `b` under [<](#<).")
+  (defn > [a b] (< b a))
+  (implements > UUID.>)
+
+  (doc <= "checks whether the UUID `a` sorts at or before `b` under [<](#<).")
+  (defn <= [a b] (not (< b a)))
+
+  (doc >= "checks whether the UUID `a` sorts at or after `b` under [<](#<).")
+  (defn >= [a b] (not (< a b)))
+
   (defn valid? [s]
     (and (= (String.length s) 36)
          (Pattern.matches?

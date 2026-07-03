@@ -31,8 +31,9 @@ You’ll then have access to the functions:
   them well suited as database keys.
 * `UUID7.timestamp`, which extracts the millisecond timestamp back out of a
   version-7 UUID (as a `Uint64`).
-* `UUID.<`, which compares two UUIDs as unsigned big-endian 128-bit integers
-  (byte by byte), ordering version-7 UUIDs chronologically.
+* `UUID.<`, `UUID.>`, `UUID.<=`, and `UUID.>=`, which compare two UUIDs as
+  unsigned big-endian 128-bit integers (byte by byte), ordering version-7 UUIDs
+  chronologically.
 * `UUID.hash`, which lets you use UUIDs as keys in a `Map` or `Set`.
 
 <hr/>
