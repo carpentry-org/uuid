@@ -16,7 +16,10 @@ You’ll then have access to the functions:
   RFC 4122,
 * `UUID.valid?`, which checks whether a string is a valid UUID,
 * `UUID.parse`, which parses a string into a UUID data type (returning a
-  `Maybe`), and
+  `Maybe`),
+* `UUID.nil` and `UUID.max`, the special all-zero Nil UUID and all-one Max UUID
+  defined in RFC 9562 (§5.9 and §5.10), along with the `UUID.nil?` and
+  `UUID.max?` predicates that test for them, and
 * `UUID4.generate`, which generates a random UUID, conforming to UUID version 4.
 * `UUID1.generate`, which generates a random UUID, conforming to UUID version 1.
   Currently the interface part of the UUID is always random (conforming to

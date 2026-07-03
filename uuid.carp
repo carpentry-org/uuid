@@ -55,6 +55,33 @@ Hashes the 16 underlying bytes directly, so it allocates nothing.")
         (= 224b (bit-and eighth 224b)) future
         reserved)))
 
+  (doc nil "returns the Nil UUID (RFC 9562 §5.9): all 128 bits set to zero,
+`00000000-0000-0000-0000-000000000000`. It is commonly used as a null or
+sentinel value where an absent UUID must still be represented.")
+  (defn nil [] (init (replicate 16 &0b)))
+  (implements zero UUID.nil)
+
+  (doc max "returns the Max UUID (RFC 9562 §5.10): all 128 bits set to one,
+`ffffffff-ffff-ffff-ffff-ffffffffffff`. It sorts after every other UUID under
+[<](#<), which makes it a convenient upper sentinel.")
+  (defn max [] (init (replicate 16 &255b)))
+
+  (doc nil? "returns whether the UUID `uuid` is the [Nil UUID](#nil), i.e. every
+one of its 16 bytes is zero.")
+  (defn nil? [uuid]
+    (let-do [a (internal uuid)
+             res true]
+      (for [i 0 16] (unless (Byte.= @(unsafe-nth a i) 0b) (set! res false)))
+      res))
+
+  (doc max? "returns whether the UUID `uuid` is the [Max UUID](#max), i.e. every
+one of its 16 bytes is `0xff`.")
+  (defn max? [uuid]
+    (let-do [a (internal uuid)
+             res true]
+      (for [i 0 16] (unless (Byte.= @(unsafe-nth a i) 255b) (set! res false)))
+      res))
+
   (doc < "compares two UUIDs as unsigned, big-endian 128-bit integers, i.e.
 byte by byte from the most significant. For version-7 UUIDs this orders them
 by creation time, so they sort chronologically.")
