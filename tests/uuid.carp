@@ -26,6 +26,15 @@
         m (Map.put (Map.create) &u &42)]
     (= &(Maybe.Just 42) &(Map.get-maybe &m &u))))
 
+; the Max UUID with only its final byte cleared, so max? must inspect every
+; byte rather than short-circuiting before the end.
+(defn almost-max []
+  (let-do [a @(UUID.internal &(UUID.max))] (Array.aset! &a 15 0b) (UUID.init a)))
+
+; an arbitrary UUID that sits strictly between the Nil and Max extremes.
+(defn sample []
+  (UUID.init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
+
 (deftest test
   (assert-equal test
     "00010203-0405-0607-0809-0a0b0c0d0e0f"
@@ -73,4 +82,63 @@
     (UUID.hash &(init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
     (UUID.hash &(init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
     "equal UUIDs hash equally")
-  (assert-true test (uuid-map-roundtrip?) "a UUID can be used as a Map key"))
+  (assert-true test (uuid-map-roundtrip?) "a UUID can be used as a Map key")
+  (assert-equal test
+    "00000000-0000-0000-0000-000000000000"
+    &(str &(UUID.nil))
+    "the Nil UUID stringifies to all zeroes")
+  (assert-equal test
+    "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    &(str &(UUID.max))
+    "the Max UUID stringifies to all ffs")
+  (assert-true test (UUID.nil? &(UUID.nil)) "nil? recognizes the Nil UUID")
+  (assert-true test (UUID.max? &(UUID.max)) "max? recognizes the Max UUID")
+  (assert-false test (UUID.nil? &(UUID.max)) "nil? rejects the Max UUID")
+  (assert-false test (UUID.max? &(UUID.nil)) "max? rejects the Nil UUID")
+  (assert-false test
+    (UUID.nil? &(init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
+    "nil? rejects a non-zero UUID")
+  (assert-false test
+    (UUID.max? &(almost-max))
+    "max? inspects every byte, not just a prefix")
+  (assert-true test
+    (UUID.< &(UUID.nil) &(UUID.max))
+    "the Nil UUID sorts below the Max UUID")
+  (assert-equal test
+    &(Maybe.Just (UUID.nil))
+    &(parse "00000000-0000-0000-0000-000000000000")
+    "the Nil UUID round-trips through parse")
+  (assert-equal test
+    &(Maybe.Just (UUID.max))
+    &(parse "ffffffff-ffff-ffff-ffff-ffffffffffff")
+    "the Max UUID round-trips through parse")
+  (assert-equal test &(UUID.nil) &(the UUID (zero)) "zero yields the Nil UUID")
+
+  ; comparison operators, exercised against the Nil and Max extremes and a
+  ; sample in between.
+  (assert-true test
+    (UUID.> &(UUID.max) &(UUID.nil))
+    "> holds when the left UUID sorts after the right")
+  (assert-true test
+    (UUID.> &(sample) &(UUID.nil))
+    "> holds against a non-extreme UUID")
+  (assert-false test
+    (UUID.> &(UUID.nil) &(UUID.max))
+    "> rejects a UUID that sorts before")
+  (assert-false test
+    (UUID.> &(sample) &(sample))
+    "> is strict, so equal UUIDs are not greater")
+  (assert-true test
+    (UUID.<= &(UUID.nil) &(UUID.max))
+    "<= holds when the left UUID sorts before")
+  (assert-true test (UUID.<= &(sample) &(sample)) "<= holds for equal UUIDs")
+  (assert-false test
+    (UUID.<= &(UUID.max) &(UUID.nil))
+    "<= rejects a UUID that sorts after")
+  (assert-true test
+    (UUID.>= &(UUID.max) &(UUID.nil))
+    ">= holds when the left UUID sorts after")
+  (assert-true test (UUID.>= &(sample) &(sample)) ">= holds for equal UUIDs")
+  (assert-false test
+    (UUID.>= &(UUID.nil) &(UUID.max))
+    ">= rejects a UUID that sorts before"))
