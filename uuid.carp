@@ -188,7 +188,8 @@ by creation time, so they sort chronologically.")
       (aset! &a 7 (from-int (bit-and th 255)))
       (aset! &a 8 (from-int (bit-and (bit-shift-right clock-seq 8) 255)))
       (aset! &a 9 (from-int (bit-and clock-seq 255)))
-      (for [i 0 5] (aset! &a (+ 10 i) (random)))
+      (for [i 0 6] (aset! &a (+ 10 i) (random)))
+      (aset! &a 10 (bit-or @(unsafe-nth &a 10) 1b))
       (UUID.init a))))
 
 (defmodule UUID7

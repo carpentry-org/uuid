@@ -35,6 +35,24 @@
 (defn sample []
   (UUID.init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
 
+; random-node v1 UUIDs set the multicast bit: LSB of byte 10 (RFC 4122 §4.5)
+(defn v1-multicast-bit-set? []
+  (let [u (UUID1.generate)
+        a (UUID.internal &u)]
+    (Byte.= 1b (Byte.bit-and @(Array.unsafe-nth a 10) 1b))))
+
+; version nibble (high 4 bits of byte 6) is 1 for v1
+(defn v1-version-nibble? []
+  (let [u (UUID1.generate)
+        a (UUID.internal &u)]
+    (Byte.= 1b (Byte.bit-shift-right @(Array.unsafe-nth a 6) 4b))))
+
+; variant bits (top 2 bits of byte 8) are 10 for RFC 4122
+(defn v1-variant-bits? []
+  (let [u (UUID1.generate)
+        a (UUID.internal &u)]
+    (Byte.= 128b (Byte.bit-and @(Array.unsafe-nth a 8) 192b))))
+
 (deftest test
   (assert-equal test
     "00010203-0405-0607-0809-0a0b0c0d0e0f"
@@ -50,6 +68,15 @@
     UUID.rfc4122
     (variant &(UUID1.generate))
     "UUID1.generate works II")
+  (assert-true test
+    (v1-multicast-bit-set?)
+    "UUID1.generate sets the RFC 4122 multicast bit on the node")
+  (assert-true test
+    (v1-version-nibble?)
+    "UUID1.generate sets version 1 in the byte-6 nibble")
+  (assert-true test
+    (v1-variant-bits?)
+    "UUID1.generate sets the RFC 4122 variant bits in byte 8")
   (assert-equal test
     &(Maybe.Just (init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
     &(parse "00010203-0405-0607-0809-0a0b0c0d0e0f")
