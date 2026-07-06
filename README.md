@@ -8,7 +8,7 @@ RFC 9562 for version 7), generatable in version 1, 4, and 7 for now.
 You’ll be able to pull in the library using:
 
 ```clojure
-(load "git@github.com:carpentry-org/uuid@0.0.6")
+(load "git@github.com:carpentry-org/uuid@0.0.7")
 ```
 
 You’ll then have access to the functions:
