@@ -205,9 +205,8 @@ by creation time, so they sort chronologically.")
 (defmodule UUID7
   (use-all Array Byte)
 
-  ; `Long` is only 32-bit on some targets, so the 48-bit timestamp math is done
-  ; in `Uint64` (which `System.nanotime` already returns); only byte-sized
-  ; values ever cross into `Int`/`Byte`.
+  ; `Uint64.to-long` narrows through C `long`, so the 48-bit timestamp stays in
+  ; `Uint64` (what `System.nanotime` returns); only bytes cross into `Int`.
   (def last-ms (Uint64.zero))
   (private last-ms)
   (hidden last-ms)
