@@ -145,10 +145,23 @@ by creation time, so they sort chronologically.")
       (UUID.init a))))
 
 (defmodule UUID1
-  (use-all Array Int Long Byte)
+  (use-all Array Int Byte)
 
   (def clock-seq 0)
-  (def slast 0l)
+
+  ; `Uint64.to-long` narrows through C `long`, so the 60-bit timestamp stays in
+  ; `Uint64` (what `System.nanotime` returns); only bytes cross into `Int`.
+  (def slast (Uint64.zero))
+
+  (private byte-at)
+  (hidden byte-at)
+  (defn byte-at [n shift]
+    (Byte.from-int
+      (Long.to-int
+        (Uint64.to-long
+          (Uint64.bit-and
+            (Uint64.bit-shift-right n (Uint64.from-long (Long.from-int shift)))
+            (Uint64.from-long 255l))))))
 
   (defn set-clock-seq [seq]
     (do
@@ -159,13 +172,13 @@ by creation time, so they sort chronologically.")
                 (to-int (Byte.random)))))
       (let-do [old clock-seq]
         (set! clock-seq (bit-or (bit-and seq 16383) 32768))
-        (when (/= old clock-seq) (set! slast 0l)))))
+        (when (/= old clock-seq) (set! slast (Uint64.zero))))))
 
   (defn get-time []
     (do
       (when (= clock-seq 0) (set-clock-seq -1))
-      (let-do [now (to-long (System.nanotime))]
-        (when (<= now slast)
+      (let-do [now (System.nanotime)]
+        (unless (Uint64.> now slast)
           (set! clock-seq (bit-or (bit-and (inc clock-seq) 16383) 32768)))
         (set! slast now)
         now)))
@@ -174,18 +187,15 @@ by creation time, so they sort chronologically.")
   ; generating random values)
   (defn generate []
     (let-do [t (get-time)
-             tl (to-int (bit-and t 4294967295l))
-             tm (to-int (bit-and (bit-shift-right t 32l) 65535l))
-             th (to-int (bit-or (bit-and (bit-shift-right t 48l) 4095l) 4096l))
              a (allocate 16)]
-      (aset! &a 0 (from-int (bit-shift-right tl 24)))
-      (aset! &a 1 (from-int (bit-and (bit-shift-right tl 16) 255)))
-      (aset! &a 2 (from-int (bit-and (bit-shift-right tl 8) 255)))
-      (aset! &a 3 (from-int (bit-and tl 255)))
-      (aset! &a 4 (from-int (bit-and (bit-shift-right tm 8) 255)))
-      (aset! &a 5 (from-int (bit-and tm 255)))
-      (aset! &a 6 (from-int (bit-and (bit-shift-right th 8) 255)))
-      (aset! &a 7 (from-int (bit-and th 255)))
+      (aset! &a 0 (byte-at t 24))
+      (aset! &a 1 (byte-at t 16))
+      (aset! &a 2 (byte-at t 8))
+      (aset! &a 3 (byte-at t 0))
+      (aset! &a 4 (byte-at t 40))
+      (aset! &a 5 (byte-at t 32))
+      (aset! &a 6 (bit-or (bit-and (byte-at t 56) 15b) 16b))
+      (aset! &a 7 (byte-at t 48))
       (aset! &a 8 (from-int (bit-and (bit-shift-right clock-seq 8) 255)))
       (aset! &a 9 (from-int (bit-and clock-seq 255)))
       (for [i 0 6] (aset! &a (+ 10 i) (random)))
@@ -195,9 +205,8 @@ by creation time, so they sort chronologically.")
 (defmodule UUID7
   (use-all Array Byte)
 
-  ; `Long` is only 32-bit on some targets, so the 48-bit timestamp math is done
-  ; in `Uint64` (which `System.nanotime` already returns); only byte-sized
-  ; values ever cross into `Int`/`Byte`.
+  ; `Uint64.to-long` narrows through C `long`, so the 48-bit timestamp stays in
+  ; `Uint64` (what `System.nanotime` returns); only bytes cross into `Int`.
   (def last-ms (Uint64.zero))
   (private last-ms)
   (hidden last-ms)
