@@ -1,7 +1,7 @@
 # UUID
 
 A simple UUID library and data type for Carp, conforming to RFC 4122 (and
-RFC 9562 for version 7), generatable in version 1, 4, and 7 for now.
+RFC 9562 for version 7), generatable in version 1, 4, 5, and 7 for now.
 
 ## Usage
 
@@ -24,6 +24,19 @@ You’ll then have access to the functions:
 * `UUID1.generate`, which generates a random UUID, conforming to UUID version 1.
   Currently the interface part of the UUID is always random (conforming to
   section 4.5 of the RFC).
+* `UUID5.generate`, which generates a name-based UUID conforming to UUID
+  version 5 (RFC 9562 §5.5): the SHA-1 hash of a namespace UUID followed by a
+  name, truncated to 128 bits. The same namespace and name always yield the
+  same UUID, which makes version 5 the one to reach for when you need
+  deterministic, content-derived identifiers:
+
+  ```clojure
+  (UUID.str &(UUID5.generate &(UUID.namespace-dns) "www.example.com"))
+  ; => "2ed6657d-e927-568b-95e1-2665a8aea6a2"
+  ```
+* `UUID.namespace-dns`, `UUID.namespace-url`, `UUID.namespace-oid`, and
+  `UUID.namespace-x500`, the four predefined namespaces from RFC 9562 §6.6 that
+  `UUID5.generate` takes as its first argument — though any UUID will do.
 * `UUID7.generate`, which generates a time-ordered UUID conforming to UUID
   version 7 (RFC 9562): a 48-bit Unix millisecond timestamp followed by a
   monotonic counter and random bits. Successive UUIDs sort in creation order
