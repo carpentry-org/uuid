@@ -1,7 +1,7 @@
 # UUID
 
 A simple UUID library and data type for Carp, conforming to RFC 4122 (and
-RFC 9562 for version 7), generatable in version 1, 4, 5, and 7 for now.
+RFC 9562 for version 7), generatable in version 1, 3, 4, 5, and 7 for now.
 
 ## Usage
 
@@ -24,6 +24,17 @@ You’ll then have access to the functions:
 * `UUID1.generate`, which generates a random UUID, conforming to UUID version 1.
   Currently the interface part of the UUID is always random (conforming to
   section 4.5 of the RFC).
+* `UUID3.generate`, which generates a name-based UUID conforming to UUID
+  version 3 (RFC 9562 §5.3): the MD5 hash of a namespace UUID followed by a
+  name, truncated to 128 bits. Version 3 is specified over MD5, which is no
+  longer considered secure; it is here to interoperate with names already
+  registered under an existing version-3 namespace, and `UUID5.generate` or
+  `UUID7.generate` are the better choice for new work:
+
+  ```clojure
+  (UUID.str &(UUID3.generate &(UUID.namespace-dns) "www.example.com"))
+  ; => "5df41881-3aed-3515-88a7-2f4a814cf09e"
+  ```
 * `UUID5.generate`, which generates a name-based UUID conforming to UUID
   version 5 (RFC 9562 §5.5): the SHA-1 hash of a namespace UUID followed by a
   name, truncated to 128 bits. The same namespace and name always yield the
@@ -36,7 +47,8 @@ You’ll then have access to the functions:
   ```
 * `UUID.namespace-dns`, `UUID.namespace-url`, `UUID.namespace-oid`, and
   `UUID.namespace-x500`, the four predefined namespaces from RFC 9562 §6.6 that
-  `UUID5.generate` takes as its first argument — though any UUID will do.
+  `UUID3.generate` and `UUID5.generate` take as their first argument — though
+  any UUID will do.
 * `UUID7.generate`, which generates a time-ordered UUID conforming to UUID
   version 7 (RFC 9562): a 48-bit Unix millisecond timestamp followed by a
   monotonic counter and random bits. Successive UUIDs sort in creation order

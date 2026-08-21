@@ -470,3 +470,226 @@ namespaces of RFC 9562 §6.6 are [UUID.namespace-dns](#namespace-dns),
       (aset! &a 6 (Byte.bit-or (Byte.bit-and @(unsafe-nth &a 6) 15b) 80b))
       (aset! &a 8 (Byte.bit-or (Byte.bit-and @(unsafe-nth &a 8) 63b) 128b))
       (UUID.init a))))
+
+(defmodule UUID3
+  (use Array)
+
+  (private of-int)
+  (hidden of-int)
+  (defn of-int [x] (Uint32.from-long (Long.from-int x)))
+
+  (private u32)
+  (hidden u32)
+  (defn u32 [hi lo]
+    (Uint32.bit-or
+      (Uint32.bit-shift-left (Uint32.from-long hi) (of-int 16))
+      (Uint32.from-long lo)))
+
+  (private rotl)
+  (hidden rotl)
+  (defn rotl [x n]
+    (Uint32.bit-or (Uint32.bit-shift-left x (of-int n))
+                   (Uint32.bit-shift-right x (of-int (- 32 n)))))
+
+  (private byte-at32)
+  (hidden byte-at32)
+  (defn byte-at32 [x shift]
+    (Byte.from-int
+      (Long.to-int
+        (Uint32.to-long
+          (Uint32.bit-and (Uint32.bit-shift-right x (of-int shift)) (of-int 255))))))
+
+  (private byte-at64)
+  (hidden byte-at64)
+  (defn byte-at64 [x shift]
+    (Byte.from-int
+      (Long.to-int
+        (Uint64.to-long
+          (Uint64.bit-and
+            (Uint64.bit-shift-right x (Uint64.from-long (Long.from-int shift)))
+            (Uint64.from-long 255l))))))
+
+  (private u8)
+  (hidden u8)
+  (defn u8 [buf i] (of-int (Byte.to-int @(unsafe-nth buf i))))
+
+  (private word-at)
+  (hidden word-at)
+  (defn word-at [buf i]
+    (Uint32.bit-or
+      (Uint32.bit-or (u8 buf i)
+                     (Uint32.bit-shift-left (u8 buf (+ i 1)) (of-int 8)))
+      (Uint32.bit-or
+        (Uint32.bit-shift-left (u8 buf (+ i 2)) (of-int 16))
+        (Uint32.bit-shift-left (u8 buf (+ i 3)) (of-int 24)))))
+
+  ; initial state: 0x67452301 0xefcdab89 0x98badcfe 0x10325476
+  (private initial-state)
+  (hidden initial-state)
+  (defn initial-state []
+    [(u32 26437l 8961l)
+     (u32 61389l 43913l)
+     (u32 39098l 56574l)
+     (u32 4146l 21622l)])
+
+  ; the per-round constants K[i] = floor(2^32 * abs(sin(i + 1))), RFC 1321 §3.4.
+  (def sines
+    [(u32 55146l 42104l)
+     (u32 59591l 46934l)
+     (u32 9248l 28891l)
+     (u32 49597l 52974l)
+     (u32 62844l 4015l)
+     (u32 18311l 50730l)
+     (u32 43056l 17939l)
+     (u32 64838l 38145l)
+     (u32 27008l 39128l)
+     (u32 35652l 63407l)
+     (u32 65535l 23473l)
+     (u32 35164l 55230l)
+     (u32 27536l 4386l)
+     (u32 64920l 29075l)
+     (u32 42617l 17294l)
+     (u32 18868l 2081l)
+     (u32 63006l 9570l)
+     (u32 49216l 45888l)
+     (u32 9822l 23121l)
+     (u32 59830l 51114l)
+     (u32 54831l 4189l)
+     (u32 580l 5203l)
+     (u32 55457l 59009l)
+     (u32 59347l 64456l)
+     (u32 8673l 52710l)
+     (u32 49975l 2006l)
+     (u32 62677l 3463l)
+     (u32 17754l 5357l)
+     (u32 43491l 59653l)
+     (u32 64751l 41976l)
+     (u32 26479l 729l)
+     (u32 36138l 19594l)
+     (u32 65530l 14658l)
+     (u32 34673l 63105l)
+     (u32 28061l 24866l)
+     (u32 64997l 14348l)
+     (u32 42174l 59972l)
+     (u32 19422l 53161l)
+     (u32 63163l 19296l)
+     (u32 48831l 48240l)
+     (u32 10395l 32454l)
+     (u32 60065l 10234l)
+     (u32 54511l 12421l)
+     (u32 1160l 7429l)
+     (u32 55764l 53305l)
+     (u32 59099l 39397l)
+     (u32 8098l 31992l)
+     (u32 50348l 22117l)
+     (u32 62505l 8772l)
+     (u32 17194l 65431l)
+     (u32 43924l 9127l)
+     (u32 64659l 41017l)
+     (u32 25947l 22979l)
+     (u32 36620l 52370l)
+     (u32 65519l 62589l)
+     (u32 34180l 24017l)
+     (u32 28584l 32335l)
+     (u32 65068l 59104l)
+     (u32 41729l 17172l)
+     (u32 19976l 4513l)
+     (u32 63315l 32386l)
+     (u32 48442l 62005l)
+     (u32 10967l 53947l)
+     (u32 60294l 54161l)])
+  (private sines)
+  (hidden sines)
+
+  ; the four left-rotate amounts of each of the four round groups.
+  (def shifts [7 12 17 22 5 9 14 20 4 11 16 23 6 10 15 21])
+  (private shifts)
+  (hidden shifts)
+
+  ; the message, a 1 bit, zeroes, and the 64-bit little-endian bit length.
+  (private padded)
+  (hidden padded)
+  (defn padded [data]
+    (let-do [len (length data)
+             total (let [r (Int.mod (+ len 9) 64)]
+               (+ (+ len 9) (if (= r 0) 0 (- 64 r))))
+             buf (replicate total &0b)
+             bits (Uint64.* (Uint64.from-long (Long.from-int len))
+                            (Uint64.from-long 8l))]
+      (for [i 0 len] (aset! &buf i @(unsafe-nth data i)))
+      (aset! &buf len 128b)
+      (for [i 0 8] (aset! &buf (+ (- total 8) i) (byte-at64 bits (* i 8))))
+      buf))
+
+  (private compress)
+  (hidden compress)
+  (defn compress [h buf off]
+    (let-do [a @(unsafe-nth h 0)
+             b @(unsafe-nth h 1)
+             c @(unsafe-nth h 2)
+             d @(unsafe-nth h 3)]
+      (for [j 0 64]
+        (let-do [f (cond
+                   (< j 16)
+                     (Uint32.bit-or (Uint32.bit-and b c)
+                                    (Uint32.bit-and (Uint32.bit-not b) d))
+                   (< j 32)
+                     (Uint32.bit-or (Uint32.bit-and d b)
+                                    (Uint32.bit-and (Uint32.bit-not d) c))
+                   (< j 48) (Uint32.bit-xor b (Uint32.bit-xor c d))
+                   (Uint32.bit-xor c (Uint32.bit-or b (Uint32.bit-not d))))
+                 g (cond
+                   (< j 16) j
+                   (< j 32) (Int.mod (+ (* 5 j) 1) 16)
+                   (< j 48) (Int.mod (+ (* 3 j) 5) 16)
+                   (Int.mod (* 7 j) 16))
+                 s @(unsafe-nth &shifts (+ (* 4 (/ j 16)) (Int.mod j 4)))
+                 tmp (Uint32.+
+                   (Uint32.+ (Uint32.+ a f) @(unsafe-nth &sines j))
+                   (word-at buf (+ off (* g 4))))]
+          (set! a d)
+          (set! d c)
+          (set! c b)
+          (set! b (Uint32.+ b (rotl tmp s)))))
+      [(Uint32.+ @(unsafe-nth h 0) a)
+       (Uint32.+ @(unsafe-nth h 1) b)
+       (Uint32.+ @(unsafe-nth h 2) c)
+       (Uint32.+ @(unsafe-nth h 3) d)]))
+
+  (private digest)
+  (hidden digest)
+  (defn digest [data]
+    (let-do [buf (padded data)
+             h (initial-state)
+             out (replicate 16 &0b)]
+      (for [blk 0 (/ (length &buf) 64)]
+        (let-do [next (compress &h &buf (* blk 64))] (set! h next)))
+      (for [i 0 4]
+        (for [j 0 4]
+          (aset! &out (+ (* i 4) j) (byte-at32 @(unsafe-nth &h i) (* j 8)))))
+      out))
+
+  (doc generate "generates a version-3 UUID (RFC 9562 §5.3): the MD5 hash of
+the `namespace` UUID followed by the UTF-8 bytes of `name`, truncated to 128
+bits, with the version and variant bits set.
+
+Version 3 is specified over MD5, which is no longer considered secure; it
+exists to interoperate with names already registered under an existing
+version-3 namespace. `UUID5.generate` and `UUID7.generate` are the better
+choice for new work.
+
+The predefined namespaces of RFC 9562 §6.6 are
+[UUID.namespace-dns](#namespace-dns), [UUID.namespace-url](#namespace-url),
+[UUID.namespace-oid](#namespace-oid) and
+[UUID.namespace-x500](#namespace-x500), but any UUID will do.
+
+```
+(UUID.str &(UUID3.generate &(UUID.namespace-dns) \"www.example.com\"))
+; => 5df41881-3aed-3515-88a7-2f4a814cf09e
+```")
+  (defn generate [namespace name]
+    (let-do [data (concat &[@(UUID.internal namespace) (String.to-bytes name)])
+             a (digest &data)]
+      (aset! &a 6 (Byte.bit-or (Byte.bit-and @(unsafe-nth &a 6) 15b) 48b))
+      (aset! &a 8 (Byte.bit-or (Byte.bit-and @(unsafe-nth &a 8) 63b) 128b))
+      (UUID.init a))))
