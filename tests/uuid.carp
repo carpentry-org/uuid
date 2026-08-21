@@ -98,6 +98,26 @@
         high (Uint64.bit-shift-right (v1-timestamp &u) (Uint64.from-long 32l))]
     (or (Uint64.= high before) (Uint64.= high after))))
 
+; a v5 UUID over a name of `n` `x`es. With the 16-byte namespace prepended this
+; puts the SHA-1 input at 16+n bytes, pinning the padding boundaries.
+(defn v5-x [n]
+  (UUID.str &(UUID5.generate &(UUID.namespace-dns) &(String.repeat n "x"))))
+
+(defn v5-deterministic? []
+  (UUID.=
+    &(UUID5.generate &(UUID.namespace-url) "https://carp-lang.org/")
+    &(UUID5.generate &(UUID.namespace-url) "https://carp-lang.org/")))
+
+(defn v5-name-sensitive? []
+  (UUID./=
+    &(UUID5.generate &(UUID.namespace-dns) "a")
+    &(UUID5.generate &(UUID.namespace-dns) "b")))
+
+(defn v5-namespace-sensitive? []
+  (UUID./=
+    &(UUID5.generate &(UUID.namespace-dns) "www.example.com")
+    &(UUID5.generate &(UUID.namespace-url) "www.example.com")))
+
 (deftest test
   (assert-equal test
     "00010203-0405-0607-0809-0a0b0c0d0e0f"
@@ -219,4 +239,90 @@
   (assert-true test (UUID.>= &(sample) &(sample)) ">= holds for equal UUIDs")
   (assert-false test
     (UUID.>= &(UUID.nil) &(UUID.max))
-    ">= rejects a UUID that sorts before"))
+    ">= rejects a UUID that sorts before")
+  (assert-equal test
+    "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+    &(str &(UUID.namespace-dns))
+    "the DNS namespace UUID matches RFC 9562 §6.6")
+  (assert-equal test
+    "6ba7b811-9dad-11d1-80b4-00c04fd430c8"
+    &(str &(UUID.namespace-url))
+    "the URL namespace UUID matches RFC 9562 §6.6")
+  (assert-equal test
+    "6ba7b812-9dad-11d1-80b4-00c04fd430c8"
+    &(str &(UUID.namespace-oid))
+    "the OID namespace UUID matches RFC 9562 §6.6")
+  (assert-equal test
+    "6ba7b814-9dad-11d1-80b4-00c04fd430c8"
+    &(str &(UUID.namespace-x500))
+    "the X.500 namespace UUID matches RFC 9562 §6.6")
+  (assert-equal test
+    5b
+    (version &(UUID5.generate &(UUID.namespace-dns) "www.example.com"))
+    "UUID5.generate sets version 5")
+  (assert-equal test
+    UUID.rfc4122
+    (variant &(UUID5.generate &(UUID.namespace-dns) "www.example.com"))
+    "UUID5.generate sets the RFC 4122 variant")
+  (assert-equal test
+    "2ed6657d-e927-568b-95e1-2665a8aea6a2"
+    &(str &(UUID5.generate &(UUID.namespace-dns) "www.example.com"))
+    "UUID5.generate matches the DNS test vector")
+  (assert-equal test
+    "4ebd0208-8328-5d69-8c44-ec50939c0967"
+    &(str &(UUID5.generate &(UUID.namespace-dns) ""))
+    "UUID5.generate hashes the namespace alone for the empty name")
+  (assert-equal test
+    "582d4dda-0f76-5c7d-8ab4-35e0d74e5468"
+    &(str &(UUID5.generate &(UUID.namespace-url) "https://carp-lang.org/"))
+    "UUID5.generate matches the URL test vector")
+  (assert-equal test
+    "6aab0456-7392-582a-b92a-ba5a7096945d"
+    &(str &(UUID5.generate &(UUID.namespace-oid) "1.3.6.1.4.1.343"))
+    "UUID5.generate matches the OID test vector")
+  (assert-equal test
+    "e3280c80-707e-51d1-a888-11b8f0e0f0a7"
+    &(str &(UUID5.generate &(UUID.namespace-x500) "CN=Veit,DC=example,DC=com"))
+    "UUID5.generate matches the X.500 test vector")
+  (assert-equal test
+    "96c8a2e0-def7-5413-bf30-feab4a304528"
+    &(str
+      &(UUID5.generate &(UUID.namespace-dns) "grüße-über-straße.example"))
+    "UUID5.generate hashes the UTF-8 bytes of a non-ASCII name")
+  (assert-equal test
+    "51440e97-37eb-5f30-9584-068bc66c16ed"
+    &(str &(UUID5.generate &(UUID.nil) "nil-namespace"))
+    "UUID5.generate accepts any UUID as a namespace")
+  (assert-true test
+    (v5-deterministic?)
+    "UUID5.generate returns the same UUID for the same inputs")
+  (assert-true test
+    (v5-name-sensitive?)
+    "UUID5.generate distinguishes names within a namespace")
+  (assert-true test
+    (v5-namespace-sensitive?)
+    "UUID5.generate distinguishes namespaces for the same name")
+  (assert-equal test
+    "2f80c0d1-1c62-579f-8d68-e61ad5592c9b"
+    &(v5-x 39)
+    "UUID5.generate pads a 55-byte hash input")
+  (assert-equal test
+    "e56fd57a-7633-5e1d-8f80-70e05ac413e5"
+    &(v5-x 40)
+    "UUID5.generate spills a 56-byte hash input into a second block")
+  (assert-equal test
+    "a112377b-8258-5ef7-b5b0-d2540bc03abb"
+    &(v5-x 47)
+    "UUID5.generate pads a 63-byte hash input")
+  (assert-equal test
+    "83993b6c-dea9-55ca-be5b-9989c85943fc"
+    &(v5-x 48)
+    "UUID5.generate pads a block-aligned 64-byte hash input")
+  (assert-equal test
+    "69b5a616-6ae8-5c37-8b46-37d527314c4d"
+    &(v5-x 103)
+    "UUID5.generate pads a 119-byte hash input")
+  (assert-equal test
+    "c917ca2c-8395-5e00-8f28-a898d41a4b8d"
+    &(v5-x 104)
+    "UUID5.generate spills a 120-byte hash input into a third block"))
