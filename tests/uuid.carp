@@ -118,6 +118,31 @@
     &(UUID5.generate &(UUID.namespace-dns) "www.example.com")
     &(UUID5.generate &(UUID.namespace-url) "www.example.com")))
 
+; a v3 UUID over a name of `n` `x`es. With the 16-byte namespace prepended this
+; puts the MD5 input at 16+n bytes, pinning the padding boundaries.
+(defn v3-x [n]
+  (UUID.str &(UUID3.generate &(UUID.namespace-dns) &(String.repeat n "x"))))
+
+(defn v3-deterministic? []
+  (UUID.=
+    &(UUID3.generate &(UUID.namespace-url) "https://carp-lang.org/")
+    &(UUID3.generate &(UUID.namespace-url) "https://carp-lang.org/")))
+
+(defn v3-name-sensitive? []
+  (UUID./=
+    &(UUID3.generate &(UUID.namespace-dns) "a")
+    &(UUID3.generate &(UUID.namespace-dns) "b")))
+
+(defn v3-namespace-sensitive? []
+  (UUID./=
+    &(UUID3.generate &(UUID.namespace-dns) "www.example.com")
+    &(UUID3.generate &(UUID.namespace-url) "www.example.com")))
+
+(defn v3-differs-from-v5? []
+  (UUID./=
+    &(UUID3.generate &(UUID.namespace-dns) "www.example.com")
+    &(UUID5.generate &(UUID.namespace-dns) "www.example.com")))
+
 (deftest test
   (assert-equal test
     "00010203-0405-0607-0809-0a0b0c0d0e0f"
@@ -325,4 +350,77 @@
   (assert-equal test
     "c917ca2c-8395-5e00-8f28-a898d41a4b8d"
     &(v5-x 104)
-    "UUID5.generate spills a 120-byte hash input into a third block"))
+    "UUID5.generate spills a 120-byte hash input into a third block")
+  (assert-equal test
+    3b
+    (version &(UUID3.generate &(UUID.namespace-dns) "www.example.com"))
+    "UUID3.generate sets version 3")
+  (assert-equal test
+    UUID.rfc4122
+    (variant &(UUID3.generate &(UUID.namespace-dns) "www.example.com"))
+    "UUID3.generate sets the RFC 4122 variant")
+  (assert-equal test
+    "5df41881-3aed-3515-88a7-2f4a814cf09e"
+    &(str &(UUID3.generate &(UUID.namespace-dns) "www.example.com"))
+    "UUID3.generate matches the DNS test vector")
+  (assert-equal test
+    "c87ee674-4ddc-3efe-a74e-dfe25da5d7b3"
+    &(str &(UUID3.generate &(UUID.namespace-dns) ""))
+    "UUID3.generate hashes the namespace alone for the empty name")
+  (assert-equal test
+    "b5d3e9ab-2f60-3ab1-af89-c003cbba4a7f"
+    &(str &(UUID3.generate &(UUID.namespace-url) "https://carp-lang.org/"))
+    "UUID3.generate matches the URL test vector")
+  (assert-equal test
+    "77bc1dc3-0a9f-3e7e-bfa5-3f611a660c80"
+    &(str &(UUID3.generate &(UUID.namespace-oid) "1.3.6.1.4.1.343"))
+    "UUID3.generate matches the OID test vector")
+  (assert-equal test
+    "152ca505-f847-3b8b-8078-77da6dcbcd25"
+    &(str &(UUID3.generate &(UUID.namespace-x500) "CN=Veit,DC=example,DC=com"))
+    "UUID3.generate matches the X.500 test vector")
+  (assert-equal test
+    "f4591ad1-d71b-318b-ad27-0516e4430048"
+    &(str
+      &(UUID3.generate &(UUID.namespace-dns) "grüße-über-straße.example"))
+    "UUID3.generate hashes the UTF-8 bytes of a non-ASCII name")
+  (assert-equal test
+    "091d2ec8-a4c8-3c71-8da2-006081c6070d"
+    &(str &(UUID3.generate &(UUID.nil) "nil-namespace"))
+    "UUID3.generate accepts any UUID as a namespace")
+  (assert-true test
+    (v3-deterministic?)
+    "UUID3.generate returns the same UUID for the same inputs")
+  (assert-true test
+    (v3-name-sensitive?)
+    "UUID3.generate distinguishes names within a namespace")
+  (assert-true test
+    (v3-namespace-sensitive?)
+    "UUID3.generate distinguishes namespaces for the same name")
+  (assert-true test
+    (v3-differs-from-v5?)
+    "UUID3.generate hashes with MD5, not SHA-1")
+  (assert-equal test
+    "9d902192-c4ec-3728-9fea-143008550e51"
+    &(v3-x 39)
+    "UUID3.generate pads a 55-byte hash input")
+  (assert-equal test
+    "86fe7d7e-7301-3ac7-88ce-33c35da4750e"
+    &(v3-x 40)
+    "UUID3.generate spills a 56-byte hash input into a second block")
+  (assert-equal test
+    "81ac6b83-b9ae-3c53-b70d-5ffe073dd680"
+    &(v3-x 47)
+    "UUID3.generate pads a 63-byte hash input")
+  (assert-equal test
+    "0ab17325-9505-3328-9d17-eff4a7e95f21"
+    &(v3-x 48)
+    "UUID3.generate pads a block-aligned 64-byte hash input")
+  (assert-equal test
+    "4ecd45a3-43b8-3e2b-a61e-1cfffdc0c518"
+    &(v3-x 103)
+    "UUID3.generate pads a 119-byte hash input")
+  (assert-equal test
+    "b8a61313-7683-3917-8433-6a4fb82ab9b9"
+    &(v3-x 104)
+    "UUID3.generate spills a 120-byte hash input into a third block"))
