@@ -189,6 +189,12 @@ by creation time, so they sort chronologically.")
             (Uint64.bit-shift-right n (Uint64.from-long (Long.from-int shift)))
             (Uint64.from-long 255l))))))
 
+  ; 100-nanosecond intervals from 1582-10-15 00:00:00 UTC to the Unix epoch.
+  (private gregorian-offset)
+  (hidden gregorian-offset)
+  (defn gregorian-offset []
+    (Uint64.* (Uint64.from-long 122192928l) (Uint64.from-long 1000000000l)))
+
   (defn set-clock-seq [seq]
     (do
       (when (= seq -1)
@@ -200,14 +206,27 @@ by creation time, so they sort chronologically.")
         (set! clock-seq (bit-or (bit-and seq 16383) 32768))
         (when (/= old clock-seq) (set! slast (Uint64.zero))))))
 
+  (doc get-time "returns the current time as RFC 9562 §5.1 defines it for
+versions 1 and 6: a 60-bit count of 100-nanosecond intervals since
+1582-10-15 00:00:00 UTC.
+
+The result is strictly increasing. Two calls landing in the same 100-nanosecond
+tick advance it by one tick; the clock sequence is bumped only when the clock
+actually steps backwards.")
   (defn get-time []
     (do
       (when (= clock-seq 0) (set-clock-seq -1))
-      (let-do [now (System.nanotime)]
-        (unless (Uint64.> now slast)
-          (set! clock-seq (bit-or (bit-and (inc clock-seq) 16383) 32768)))
-        (set! slast now)
-        now)))
+      (let-do [now (Uint64.+
+                 (Uint64./ (System.nanotime) (Uint64.from-long 100l))
+                 (gregorian-offset))]
+        (cond
+          (Uint64.> now slast) (set! slast now)
+          (Uint64.< now slast)
+            (do
+              (set! clock-seq (bit-or (bit-and (inc clock-seq) 16383) 32768))
+              (set! slast now))
+          (set! slast (Uint64.+ slast (Uint64.from-long 1l))))
+        slast)))
 
   ; TODO: actually get hardware interfaces (we’re only adhering to 4.5 here,
   ; generating random values)
@@ -226,7 +245,29 @@ by creation time, so they sort chronologically.")
       (aset! &a 9 (from-int (bit-and clock-seq 255)))
       (for [i 0 6] (aset! &a (+ 10 i) (random)))
       (aset! &a 10 (bit-or @(unsafe-nth &a 10) 1b))
-      (UUID.init a))))
+      (UUID.init a)))
+
+  (doc timestamp "extracts the 60-bit timestamp of a version-1 UUID as a
+`Uint64`: 100-nanosecond intervals since 1582-10-15 00:00:00 UTC, with the
+version nibble stripped. [to-nanotime](#to-nanotime) puts it back on the Unix
+scale `System.nanotime` uses.")
+  (defn timestamp [uuid]
+    (let-do [a (UUID.internal uuid)
+             order [7 4 5 0 1 2 3]
+             ts (Uint64.from-long
+               (Long.from-int (to-int (bit-and @(unsafe-nth a 6) 15b))))]
+      (for [i 0 7]
+        (set! ts
+              (Uint64.bit-or
+                (Uint64.bit-shift-left ts (Uint64.from-long 8l))
+                (Uint64.from-long
+                  (Long.from-int (to-int @(unsafe-nth a @(unsafe-nth &order i))))))))
+      ts))
+
+  (doc to-nanotime "converts a version-1 or version-6 [timestamp](#timestamp)
+into nanoseconds since the Unix epoch, the scale `System.nanotime` uses.")
+  (defn to-nanotime [ts]
+    (Uint64.* (Uint64.- ts (gregorian-offset)) (Uint64.from-long 100l))))
 
 (defmodule UUID7
   (use-all Array Byte)

@@ -21,9 +21,14 @@ You’ll then have access to the functions:
   defined in RFC 9562 (§5.9 and §5.10), along with the `UUID.nil?` and
   `UUID.max?` predicates that test for them, and
 * `UUID4.generate`, which generates a random UUID, conforming to UUID version 4.
-* `UUID1.generate`, which generates a random UUID, conforming to UUID version 1.
-  Currently the interface part of the UUID is always random (conforming to
-  section 4.5 of the RFC).
+* `UUID1.generate`, which generates a time-based UUID conforming to UUID
+  version 1: a 60-bit count of 100-nanosecond intervals since
+  1582-10-15 00:00:00 UTC, a clock sequence, and a node. The node is always
+  random rather than a hardware address, which section 4.5 of RFC 4122 allows.
+* `UUID1.timestamp`, which extracts that 60-bit timestamp back out of a
+  version-1 UUID (as a `Uint64`), and `UUID1.to-nanotime`, which converts such a
+  timestamp to nanoseconds since the Unix epoch — the scale `System.nanotime`
+  uses, and the one you can compare against a wall clock.
 * `UUID3.generate`, which generates a name-based UUID conforming to UUID
   version 3 (RFC 9562 §5.3): the MD5 hash of a namespace UUID followed by a
   name, truncated to 128 bits. Version 3 is specified over MD5, which is no
