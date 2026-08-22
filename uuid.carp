@@ -269,6 +269,72 @@ into nanoseconds since the Unix epoch, the scale `System.nanotime` uses.")
   (defn to-nanotime [ts]
     (Uint64.* (Uint64.- ts (gregorian-offset)) (Uint64.from-long 100l))))
 
+(defmodule UUID6
+  (use-all Array Byte)
+
+  ; laying the timestamp out the other way round moves every one of its bytes
+  ; half a byte along, so each is two nibbles of two neighbouring source bytes.
+  (private shifted)
+  (hidden shifted)
+  (defn shifted [a hi lo]
+    (bit-or
+      (bit-shift-left (bit-and @(unsafe-nth a hi) 15b) 4b)
+      (bit-shift-right @(unsafe-nth a lo) 4b)))
+
+  (doc from-v1 "converts a version-1 UUID into the version-6 UUID carrying the
+same timestamp, clock sequence and node (RFC 9562 §5.6), which is how existing
+version-1 identifiers are migrated to a sortable layout.
+
+```
+(UUID.str &(UUID6.from-v1 &v1))
+; c232ab00-9414-11ec-b3c8-9f6bdeced846 => 1ec9414c-232a-6b00-b3c8-9f6bdeced846
+```")
+  (defn from-v1 [uuid]
+    (let-do [a (UUID.internal uuid)
+             out @a]
+      (aset! &out 0 (shifted a 6 7))
+      (aset! &out 1 (shifted a 7 4))
+      (aset! &out 2 (shifted a 4 5))
+      (aset! &out 3 (shifted a 5 0))
+      (aset! &out 4 (shifted a 0 1))
+      (aset! &out 5 (shifted a 1 2))
+      (aset! &out 6 (bit-or (bit-and @(unsafe-nth a 2) 15b) 96b))
+      (aset! &out 7 @(unsafe-nth a 3))
+      (UUID.init out)))
+
+  (doc to-v1 "converts a version-6 UUID back into the version-1 UUID carrying
+the same timestamp, clock sequence and node, the inverse of
+[from-v1](#from-v1).")
+  (defn to-v1 [uuid]
+    (let-do [a (UUID.internal uuid)
+             out @a]
+      (aset! &out 0 (shifted a 3 4))
+      (aset! &out 1 (shifted a 4 5))
+      (aset! &out
+             2
+             (bit-or
+               (bit-shift-left (bit-and @(unsafe-nth a 5) 15b) 4b)
+               (bit-and @(unsafe-nth a 6) 15b)))
+      (aset! &out 3 @(unsafe-nth a 7))
+      (aset! &out 4 (shifted a 1 2))
+      (aset! &out 5 (shifted a 2 3))
+      (aset! &out 6 (bit-or (bit-shift-right @(unsafe-nth a 0) 4b) 16b))
+      (aset! &out 7 (shifted a 0 1))
+      (UUID.init out)))
+
+  (doc generate "generates a new version-6 UUID (RFC 9562 §5.6): the same
+60-bit timestamp, clock sequence and node as `UUID1.generate`, with the
+timestamp laid out most significant bits first. Successive UUIDs therefore
+compare in creation order under `UUID.<`, which is what version 6 is for and
+what version 1 cannot do.")
+  (defn generate [] (from-v1 &(UUID1.generate)))
+
+  (doc timestamp "extracts the 60-bit timestamp of a version-6 UUID as a
+`Uint64`: 100-nanosecond intervals since 1582-10-15 00:00:00 UTC, with the
+version nibble stripped. `UUID1.to-nanotime` puts it back on the Unix scale
+`System.nanotime` uses.")
+  (defn timestamp [uuid] (UUID1.timestamp &(to-v1 uuid))))
+
 (defmodule UUID7
   (use-all Array Byte)
 

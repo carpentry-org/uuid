@@ -123,12 +123,27 @@
 
 (defn parsed [s] (Maybe.from (UUID.parse s) (UUID.nil)))
 
-; RFC 9562’s version-1 test vector.
+; RFC 9562’s version-1 and version-6 test vectors: one UUID in both layouts.
 (defn v1-vector [] (parsed "c232ab00-9414-11ec-b3c8-9f6bdeced846"))
 
-; it carries 2022-02-22 19:22:22 UTC, i.e. 1645557742 Unix seconds.
+(defn v6-vector [] (parsed "1ec9414c-232a-6b00-b3c8-9f6bdeced846"))
+
+; both vectors carry 2022-02-22 19:22:22 UTC, i.e. 1645557742 Unix seconds.
 (defn vector-nanotime []
   (Uint64.* (Uint64.from-long 1645557742l) (Uint64.from-long 1000000000l)))
+
+(defn v6-monotonic? []
+  (let-do [u1 (UUID6.generate)
+           u2 (UUID6.generate)] (UUID.< &u1 &u2)))
+
+(defn v6-decodes-to-now? []
+  (let [u (UUID6.generate)]
+    (within? (UUID1.to-nanotime (UUID6.timestamp &u))
+             (System.nanotime)
+             (two-seconds-ns))))
+
+(defn v6-roundtrips? []
+  (let [u (UUID1.generate)] (UUID.= &u &(UUID6.to-v1 &(UUID6.from-v1 &u)))))
 
 ; a v5 UUID over a name of `n` `x`es. With the 16-byte namespace prepended this
 ; puts the SHA-1 input at 16+n bytes, pinning the padding boundaries.
@@ -246,6 +261,38 @@
   (assert-true test
     (v7-timestamp-close?)
     "UUID7.timestamp round-trips to within a second of now")
+  (assert-equal test
+    6b
+    (version &(UUID6.generate))
+    "UUID6.generate sets version 6")
+  (assert-equal test
+    UUID.rfc4122
+    (variant &(UUID6.generate))
+    "UUID6.generate sets the RFC 4122 variant")
+  (assert-true test
+    (valid? &(str &(UUID6.generate)))
+    "UUID6.generate produces a structurally valid UUID")
+  (assert-true test
+    (v6-monotonic?)
+    "successive UUID6.generate results are strictly ordered")
+  (assert-true test
+    (v6-decodes-to-now?)
+    "a v6 timestamp decodes to the current time on the Unix scale")
+  (assert-equal test
+    "1ec9414c-232a-6b00-b3c8-9f6bdeced846"
+    &(str &(UUID6.from-v1 &(v1-vector)))
+    "UUID6.from-v1 matches the RFC 9562 version-6 test vector")
+  (assert-equal test
+    "c232ab00-9414-11ec-b3c8-9f6bdeced846"
+    &(str &(UUID6.to-v1 &(v6-vector)))
+    "UUID6.to-v1 inverts the layout on the RFC 9562 test vectors")
+  (assert-equal test
+    (vector-nanotime)
+    (UUID1.to-nanotime (UUID6.timestamp &(v6-vector)))
+    "UUID6.timestamp decodes the RFC 9562 version-6 test vector")
+  (assert-true test
+    (v6-roundtrips?)
+    "from-v1 and to-v1 round-trip a generated UUID")
   (assert-equal test
     (UUID.hash &(init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
     (UUID.hash &(init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))

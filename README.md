@@ -1,7 +1,8 @@
 # UUID
 
 A simple UUID library and data type for Carp, conforming to RFC 4122 (and
-RFC 9562 for version 7), generatable in version 1, 3, 4, 5, and 7 for now.
+RFC 9562 for versions 6 and 7), generatable in version 1, 3, 4, 5, 6, and 7
+for now.
 
 ## Usage
 
@@ -54,6 +55,19 @@ You’ll then have access to the functions:
   `UUID.namespace-x500`, the four predefined namespaces from RFC 9562 §6.6 that
   `UUID3.generate` and `UUID5.generate` take as their first argument — though
   any UUID will do.
+* `UUID6.generate`, which generates a time-ordered UUID conforming to UUID
+  version 6 (RFC 9562 §5.6): the same timestamp, clock sequence and node as
+  `UUID1.generate`, but with the timestamp laid out most significant bits
+  first, so that successive UUIDs sort in creation order under `UUID.<`.
+  `UUID6.timestamp` reads the timestamp back out.
+* `UUID6.from-v1` and `UUID6.to-v1`, which convert between the two layouts, so
+  that identifiers already issued as version 1 can be migrated to a sortable
+  form without changing what they mean:
+
+  ```clojure
+  (UUID.str &(UUID6.from-v1 &v1))
+  ; c232ab00-9414-11ec-b3c8-9f6bdeced846 => 1ec9414c-232a-6b00-b3c8-9f6bdeced846
+  ```
 * `UUID7.generate`, which generates a time-ordered UUID conforming to UUID
   version 7 (RFC 9562): a 48-bit Unix millisecond timestamp followed by a
   monotonic counter and random bits. Successive UUIDs sort in creation order
