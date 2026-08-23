@@ -158,6 +158,9 @@
     (ignore (UUID1.replay &(tie-readings)))
     (Int.= before UUID1.clock-seq)))
 
+(defn catch-up-shrinks-drift? []
+  (Uint64.= @(Array.unsafe-nth &(UUID1.replay &(tie-readings)) 3) (ticks-in 3)))
+
 ; ties, then a reading that genuinely steps backwards, then the tick after it.
 (defn backwards-readings []
   [(ticks-in 4) (ticks-in 4) (ticks-in 4) (ticks-in 2) (ticks-in 3)])
@@ -320,6 +323,9 @@
   (assert-true test
     (ties-keep-clock-seq?)
     "readings inside one tick leave the clock sequence alone")
+  (assert-true test
+    (catch-up-shrinks-drift?)
+    "a clock catching up part of the way shrinks the ticks the ties ran ahead")
   (assert-true test
     (backwards-bumps-clock-seq?)
     "a clock stepping backwards bumps the clock sequence")

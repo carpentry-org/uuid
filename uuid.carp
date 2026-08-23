@@ -109,8 +109,8 @@ X.500 distinguished names.")
   (defn namespace-x500 [] (rfc-namespace 20b))
 
   (doc < "compares two UUIDs as unsigned, big-endian 128-bit integers, i.e.
-byte by byte from the most significant. For version-7 UUIDs this orders them
-by creation time, so they sort chronologically.")
+byte by byte from the most significant. For version-6 and version-7 UUIDs this
+orders them by creation time, so they sort chronologically.")
   (defn < [a b]
     (let-do [aa (internal a)
              ba (internal b)
@@ -175,9 +175,11 @@ by creation time, so they sort chronologically.")
 
   (def clock-seq 0)
 
-  ; `Uint64.to-long` narrows through C `long`, so the 60-bit timestamp stays in
-  ; `Uint64` (what `System.nanotime` returns); only bytes cross into `Int`.
+  ; the clock reading behind the last emitted timestamp, in RFC ticks.
+  ; `Uint64.to-long` narrows through C `long`, so it stays in `Uint64`.
   (def slast (Uint64.zero))
+  (private slast)
+  (hidden slast)
 
   ; ticks the last emitted timestamp sits ahead of `slast`.
   (def adjustment 0)
