@@ -1,7 +1,8 @@
 # UUID
 
 A simple UUID library and data type for Carp, conforming to RFC 4122 (and
-RFC 9562 for version 7), generatable in version 1, 3, 4, 5, and 7 for now.
+RFC 9562 for versions 6 and 7), generatable in version 1, 3, 4, 5, 6, and 7
+for now.
 
 ## Usage
 
@@ -21,9 +22,16 @@ You’ll then have access to the functions:
   defined in RFC 9562 (§5.9 and §5.10), along with the `UUID.nil?` and
   `UUID.max?` predicates that test for them, and
 * `UUID4.generate`, which generates a random UUID, conforming to UUID version 4.
-* `UUID1.generate`, which generates a random UUID, conforming to UUID version 1.
-  Currently the interface part of the UUID is always random (conforming to
-  section 4.5 of the RFC).
+* `UUID1.generate`, which generates a time-based UUID conforming to UUID
+  version 1: a 60-bit count of 100-nanosecond intervals since
+  1582-10-15 00:00:00 UTC, a clock sequence, and a node. The node is always
+  random rather than a hardware address, which section 4.5 of RFC 4122 allows.
+* `UUID1.timestamp`, which extracts that 60-bit timestamp back out of a
+  version-1 UUID (as a `Uint64`), and `UUID1.to-nanotime`, which converts such a
+  timestamp to nanoseconds since the Unix epoch — the scale `System.nanotime`
+  uses, and the one you can compare against a wall clock. Version-1 timestamps
+  run from 1582 to 5236, so `to-nanotime` gives a `Maybe`, empty outside the
+  1970 to 2554 range that scale covers.
 * `UUID3.generate`, which generates a name-based UUID conforming to UUID
   version 3 (RFC 9562 §5.3): the MD5 hash of a namespace UUID followed by a
   name, truncated to 128 bits. Version 3 is specified over MD5, which is no
@@ -49,6 +57,19 @@ You’ll then have access to the functions:
   `UUID.namespace-x500`, the four predefined namespaces from RFC 9562 §6.6 that
   `UUID3.generate` and `UUID5.generate` take as their first argument — though
   any UUID will do.
+* `UUID6.generate`, which generates a time-ordered UUID conforming to UUID
+  version 6 (RFC 9562 §5.6): the same timestamp, clock sequence and node as
+  `UUID1.generate`, but with the timestamp laid out most significant bits
+  first, so that successive UUIDs sort in creation order under `UUID.<`.
+  `UUID6.timestamp` reads the timestamp back out.
+* `UUID6.from-v1` and `UUID6.to-v1`, which convert between the two layouts, so
+  that identifiers already issued as version 1 can be migrated to a sortable
+  form without changing what they mean:
+
+  ```clojure
+  (UUID.str &(UUID6.from-v1 &v1))
+  ; c232ab00-9414-11ec-b3c8-9f6bdeced846 => 1ec9414c-232a-6b00-b3c8-9f6bdeced846
+  ```
 * `UUID7.generate`, which generates a time-ordered UUID conforming to UUID
   version 7 (RFC 9562): a 48-bit Unix millisecond timestamp followed by a
   monotonic counter and random bits. Successive UUIDs sort in creation order
@@ -57,8 +78,8 @@ You’ll then have access to the functions:
 * `UUID7.timestamp`, which extracts the millisecond timestamp back out of a
   version-7 UUID (as a `Uint64`).
 * `UUID.<`, `UUID.>`, `UUID.<=`, and `UUID.>=`, which compare two UUIDs as
-  unsigned big-endian 128-bit integers (byte by byte), ordering version-7 UUIDs
-  chronologically.
+  unsigned big-endian 128-bit integers (byte by byte), ordering version-6 and
+  version-7 UUIDs chronologically.
 * `UUID.hash`, which lets you use UUIDs as keys in a `Map` or `Set`.
 
 <hr/>

@@ -10,15 +10,20 @@
   (let-do [u1 (UUID7.generate)
            u2 (UUID7.generate)] (UUID.< &u1 &u2)))
 
+; |a - b| < limit, subtracting in the larger direction to avoid Uint64 underflow.
+(defn within? [a b limit]
+  (if (Uint64.> a b)
+    (Uint64.< (Uint64.- a b) limit)
+    (Uint64.< (Uint64.- b a) limit)))
+
+(defn two-seconds-ns [] (Uint64.from-long 2000000000l))
+
 ; the timestamp read back out of a fresh v7 UUID should be within ~2s of now.
-; the comparison avoids Uint64 underflow by subtracting in the larger direction.
 (defn v7-timestamp-close? []
-  (let-do [u (UUID7.generate)
-           ts (UUID7.timestamp &u)
-           now (Uint64./ (System.nanotime) (Uint64.from-long 1000000l))]
-    (if (Uint64.> now ts)
-      (Uint64.< (Uint64.- now ts) (Uint64.from-long 2000l))
-      (Uint64.< (Uint64.- ts now) (Uint64.from-long 2000l)))))
+  (let [u (UUID7.generate)]
+    (within? (UUID7.timestamp &u)
+             (Uint64./ (System.nanotime) (Uint64.from-long 1000000l))
+             (Uint64.from-long 2000l))))
 
 ; a UUID must be usable as a Map key, which requires a hash implementation.
 (defn uuid-map-roundtrip? []
@@ -74,20 +79,125 @@
                     @(Array.unsafe-nth a @(Array.unsafe-nth &order i))))))))
     (Uint64.bit-and ts (mask60))))
 
-; the timestamp of a fresh v1 UUID should be within a second of the clock. The
-; difference is taken modulo 2^60 so a rollover cannot flake the comparison.
+; the version-1 timestamp of the Unix epoch, and the clock on the scale
+; RFC 9562 §5.1 defines for versions 1 and 6 — both recomputed here so the
+; assertions never check the library against itself.
+(defn unix-epoch-ticks []
+  (Uint64.* (Uint64.from-long 122192928l) (Uint64.from-long 1000000000l)))
+
+(defn rfc-now []
+  (Uint64.+
+    (Uint64./ (System.nanotime) (Uint64.from-long 100l))
+    (unix-epoch-ticks)))
+
+; two seconds, in the 100-nanosecond ticks a v1 or v6 timestamp counts.
+(defn two-seconds-ticks [] (Uint64.from-long 20000000l))
+
 (defn v1-timestamp-tracks-clock? []
-  (let [u (UUID1.generate)
-        ts (v1-timestamp &u)
-        now (Uint64.bit-and (System.nanotime) (mask60))]
-    (Uint64.<
-      (Uint64.bit-and (Uint64.- now ts) (mask60))
-      (Uint64.from-long 1000000000l))))
+  (let [u (UUID1.generate)]
+    (within? (v1-timestamp &u) (rfc-now) (two-seconds-ticks))))
+
+(defn v1-timestamp-matches-fields? []
+  (let [u (UUID1.generate)] (Uint64.= (UUID1.timestamp &u) (v1-timestamp &u))))
+
+; what an external reader gets: the timestamp put back on the Unix scale.
+(defn v1-decodes-to-now? []
+  (let [u (UUID1.generate)]
+    (within?
+      (Maybe.or-zero (UUID1.to-nanotime (UUID1.timestamp &u)))
+      (System.nanotime)
+      (two-seconds-ns))))
+
+; two UUIDs generated inside one 100-nanosecond tick must still differ in time.
+(defn v1-timestamps-increase? []
+  (let-do [u1 (UUID1.generate)
+           u2 (UUID1.generate)]
+    (Uint64.> (UUID1.timestamp &u2) (UUID1.timestamp &u1))))
+
+; the version-1 clock state, driven by synthetic readings: two real reads never
+; land inside one 100-nanosecond tick.
+(defmodule UUID1
+  (defn replay [readings]
+    (let-do [out (Array.copy readings)]
+      (set! slast (Uint64.zero))
+      (set! adjustment 0)
+      (for [i 0 (Array.length readings)]
+        (do
+          (ignore (advance @(Array.unsafe-nth readings i)))
+          (Array.aset! &out i (emitted))))
+      out))
+
+  (defn tick [now] (do (ignore (advance now)) (emitted)))
+
+  (defn stalled? [now] (not (advance now))))
+
+; a synthetic clock reading below the real clock, built as a product of two
+; sub-2^31 values because a 32-bit build folds a Long literal this large.
+(defn tick-base []
+  (Uint64.* (Uint64.from-long 130000000l) (Uint64.from-long 1000000000l)))
+
+(defn ticks-in [n] (Uint64.+ (tick-base) (Uint64.from-long (Long.from-int n))))
+
+(defn increasing? [xs]
+  (let-do [ok true]
+    (for [i 1 (Array.length xs)]
+      (unless (Uint64.< @(Array.unsafe-nth xs (Int.- i 1))
+                        @(Array.unsafe-nth xs i))
+        (set! ok false)))
+    ok))
+
+; three readings inside one tick, then the tick the burst has already reached.
+(defn tie-readings [] [(ticks-in 0) (ticks-in 0) (ticks-in 0) (ticks-in 1)])
+
+(defn ties-increase? [] (increasing? &(UUID1.replay &(tie-readings))))
+
+(defn ties-keep-clock-seq? []
+  (let-do [before 0]
+    (UUID1.set-clock-seq -1)
+    (set! before UUID1.clock-seq)
+    (ignore (UUID1.replay &(tie-readings)))
+    (Int.= before UUID1.clock-seq)))
+
+(defn catch-up-shrinks-drift? []
+  (Uint64.= @(Array.unsafe-nth &(UUID1.replay &(tie-readings)) 3) (ticks-in 3)))
+
+; ties, then a reading that genuinely steps backwards, then the tick after it.
+(defn backwards-readings []
+  [(ticks-in 4) (ticks-in 4) (ticks-in 4) (ticks-in 2) (ticks-in 3)])
+
+(defn backwards-bumps-clock-seq? []
+  (let-do [before 0]
+    (UUID1.set-clock-seq -1)
+    (set! before UUID1.clock-seq)
+    (ignore (UUID1.replay &(backwards-readings)))
+    (Int./= before UUID1.clock-seq)))
+
+(defn backwards-clears-adjustment? []
+  (Uint64.=
+    @(Array.unsafe-nth &(UUID1.replay &(backwards-readings)) 4)
+    (ticks-in 3)))
+
+; ties, then a reading well past them, then a tie at that new reading.
+(defn forward-readings []
+  [(ticks-in 0) (ticks-in 0) (ticks-in 0) (ticks-in 100) (ticks-in 100)])
+
+(defn forward-clears-adjustment? []
+  (Uint64.=
+    @(Array.unsafe-nth &(UUID1.replay &(forward-readings)) 4)
+    (ticks-in 101)))
+
+; one forward reading and nine ties exhaust the adjustment; the tenth tie waits.
+(defn stalls-at-cap? []
+  (do
+    (ignore (UUID1.replay &(Array.replicate 10 &(tick-base))))
+    (UUID1.stalled? (tick-base))))
+
+(defn recovers-after-stall? []
+  (let [stalled (stalls-at-cap?)]
+    (and stalled (Uint64.= (UUID1.tick (ticks-in 10)) (ticks-in 10)))))
 
 (defn clock-above-32-bits []
-  (Uint64.bit-shift-right
-    (Uint64.bit-and (System.nanotime) (mask60))
-    (Uint64.from-long 32l)))
+  (Uint64.bit-shift-right (rfc-now) (Uint64.from-long 32l)))
 
 ; time_mid and time_hi must hold bits 32-59 of the clock. Reading those bits on
 ; both sides of the call covers a carry into bit 32 landing mid-test.
@@ -97,6 +207,31 @@
         after (clock-above-32-bits)
         high (Uint64.bit-shift-right (v1-timestamp &u) (Uint64.from-long 32l))]
     (or (Uint64.= high before) (Uint64.= high after))))
+
+(defn parsed [s] (Maybe.from (UUID.parse s) (UUID.nil)))
+
+; RFC 9562’s version-1 and version-6 test vectors: one UUID in both layouts.
+(defn v1-vector [] (parsed "c232ab00-9414-11ec-b3c8-9f6bdeced846"))
+
+(defn v6-vector [] (parsed "1ec9414c-232a-6b00-b3c8-9f6bdeced846"))
+
+; both vectors carry 2022-02-22 19:22:22 UTC, i.e. 1645557742 Unix seconds.
+(defn vector-nanotime []
+  (Uint64.* (Uint64.from-long 1645557742l) (Uint64.from-long 1000000000l)))
+
+(defn v6-monotonic? []
+  (let-do [u1 (UUID6.generate)
+           u2 (UUID6.generate)] (UUID.< &u1 &u2)))
+
+(defn v6-decodes-to-now? []
+  (let [u (UUID6.generate)]
+    (within?
+      (Maybe.or-zero (UUID1.to-nanotime (UUID6.timestamp &u)))
+      (System.nanotime)
+      (two-seconds-ns))))
+
+(defn v6-roundtrips? []
+  (let [u (UUID1.generate)] (UUID.= &u &(UUID6.to-v1 &(UUID6.from-v1 &u)))))
 
 ; a v5 UUID over a name of `n` `x`es. With the 16-byte namespace prepended this
 ; puts the SHA-1 input at 16+n bytes, pinning the padding boundaries.
@@ -173,6 +308,48 @@
   (assert-true test
     (v1-high-bits-match-clock?)
     "UUID1.generate fills time_mid and time_hi from the clock")
+  (assert-true test
+    (v1-timestamp-matches-fields?)
+    "UUID1.timestamp reads back the raw timestamp fields")
+  (assert-true test
+    (v1-decodes-to-now?)
+    "a v1 timestamp decodes to the current time on the Unix scale")
+  (assert-true test
+    (v1-timestamps-increase?)
+    "successive UUID1.generate timestamps strictly increase")
+  (assert-true test
+    (ties-increase?)
+    "readings inside one tick still give strictly increasing timestamps")
+  (assert-true test
+    (ties-keep-clock-seq?)
+    "readings inside one tick leave the clock sequence alone")
+  (assert-true test
+    (catch-up-shrinks-drift?)
+    "a clock catching up part of the way shrinks the ticks the ties ran ahead")
+  (assert-true test
+    (backwards-bumps-clock-seq?)
+    "a clock stepping backwards bumps the clock sequence")
+  (assert-true test
+    (forward-clears-adjustment?)
+    "a real forward step clears the ticks the ties ran ahead")
+  (assert-true test
+    (backwards-clears-adjustment?)
+    "a clock stepping backwards clears the ticks the ties ran ahead")
+  (assert-true test
+    (recovers-after-stall?)
+    "the generator stops nine ticks ahead of the clock, then resumes")
+  (assert-equal test
+    &(Maybe.Just (Uint64.zero))
+    &(UUID1.to-nanotime (unix-epoch-ticks))
+    "the Unix epoch converts to nanotime zero")
+  (assert-equal test
+    &(Maybe.Nothing)
+    &(UUID1.to-nanotime (Uint64.- (unix-epoch-ticks) (Uint64.from-long 1l)))
+    "a timestamp before the Unix epoch has no nanotime")
+  (assert-equal test
+    &(Maybe.Just (vector-nanotime))
+    &(UUID1.to-nanotime (UUID1.timestamp &(v1-vector)))
+    "UUID1.timestamp decodes the RFC 9562 version-1 test vector")
   (assert-equal test
     &(Maybe.Just (init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
     &(parse "00010203-0405-0607-0809-0a0b0c0d0e0f")
@@ -201,6 +378,38 @@
   (assert-true test
     (v7-timestamp-close?)
     "UUID7.timestamp round-trips to within a second of now")
+  (assert-equal test
+    6b
+    (version &(UUID6.generate))
+    "UUID6.generate sets version 6")
+  (assert-equal test
+    UUID.rfc4122
+    (variant &(UUID6.generate))
+    "UUID6.generate sets the RFC 4122 variant")
+  (assert-true test
+    (valid? &(str &(UUID6.generate)))
+    "UUID6.generate produces a structurally valid UUID")
+  (assert-true test
+    (v6-monotonic?)
+    "successive UUID6.generate results are strictly ordered")
+  (assert-true test
+    (v6-decodes-to-now?)
+    "a v6 timestamp decodes to the current time on the Unix scale")
+  (assert-equal test
+    "1ec9414c-232a-6b00-b3c8-9f6bdeced846"
+    &(str &(UUID6.from-v1 &(v1-vector)))
+    "UUID6.from-v1 matches the RFC 9562 version-6 test vector")
+  (assert-equal test
+    "c232ab00-9414-11ec-b3c8-9f6bdeced846"
+    &(str &(UUID6.to-v1 &(v6-vector)))
+    "UUID6.to-v1 inverts the layout on the RFC 9562 test vectors")
+  (assert-equal test
+    &(Maybe.Just (vector-nanotime))
+    &(UUID1.to-nanotime (UUID6.timestamp &(v6-vector)))
+    "UUID6.timestamp decodes the RFC 9562 version-6 test vector")
+  (assert-true test
+    (v6-roundtrips?)
+    "from-v1 and to-v1 round-trip a generated UUID")
   (assert-equal test
     (UUID.hash &(init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
     (UUID.hash &(init [0b 1b 2b 3b 4b 5b 6b 7b 8b 9b 10b 11b 12b 13b 14b 15b]))
