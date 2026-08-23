@@ -179,6 +179,16 @@ by creation time, so they sort chronologically.")
   ; `Uint64` (what `System.nanotime` returns); only bytes cross into `Int`.
   (def slast (Uint64.zero))
 
+  ; ticks the last emitted timestamp sits ahead of `slast`.
+  (def adjustment 0)
+  (private adjustment)
+  (hidden adjustment)
+
+  ; the most `adjustment` may reach before the generator waits for the clock.
+  (def max-adjustment 9)
+  (private max-adjustment)
+  (hidden max-adjustment)
+
   (private byte-at)
   (hidden byte-at)
   (defn byte-at [n shift]
@@ -204,29 +214,54 @@ by creation time, so they sort chronologically.")
                 (to-int (Byte.random)))))
       (let-do [old clock-seq]
         (set! clock-seq (bit-or (bit-and seq 16383) 32768))
-        (when (/= old clock-seq) (set! slast (Uint64.zero))))))
+        (when-do (/= old clock-seq)
+          (set! slast (Uint64.zero))
+          (set! adjustment 0)))))
+
+  (private read-clock)
+  (hidden read-clock)
+  (defn read-clock []
+    (Uint64.+
+      (Uint64./ (System.nanotime) (Uint64.from-long 100l))
+      (gregorian-offset)))
+
+  (private emitted)
+  (hidden emitted)
+  (defn emitted []
+    (Uint64.+ slast (Uint64.from-long (Long.from-int adjustment))))
+
+  ; folds a clock reading into the state. False, and the state untouched, when
+  ; that would put the timestamp more than `max-adjustment` ticks ahead of it.
+  (private advance)
+  (hidden advance)
+  (defn advance [now]
+    (cond
+      (Uint64.< now slast)
+        (do
+          (set! clock-seq (bit-or (bit-and (inc clock-seq) 16383) 32768))
+          (set! slast now)
+          (set! adjustment 0)
+          true)
+      (Uint64.> now (emitted)) (do (set! slast now) (set! adjustment 0) true)
+      (let [ahead (inc (Long.to-int (Uint64.to-long (Uint64.- (emitted) now))))]
+        (if (> ahead max-adjustment)
+          false
+          (do (set! slast now) (set! adjustment ahead) true)))))
 
   (doc get-time "returns the current time as RFC 9562 §5.1 defines it for
 versions 1 and 6: a 60-bit count of 100-nanosecond intervals since
 1582-10-15 00:00:00 UTC.
 
-The result is strictly increasing. Two calls landing in the same 100-nanosecond
-tick advance it by one tick; the clock sequence is bumped only when the clock
-actually steps backwards.")
+The result is strictly increasing. Calls landing inside one 100-nanosecond tick
+each advance it by a tick, up to nine ticks ahead of the clock, after which the
+generator waits for the clock to catch up. The clock sequence is bumped only
+when the clock actually steps backwards.")
   (defn get-time []
     (do
       (when (= clock-seq 0) (set-clock-seq -1))
-      (let-do [now (Uint64.+
-                 (Uint64./ (System.nanotime) (Uint64.from-long 100l))
-                 (gregorian-offset))]
-        (cond
-          (Uint64.> now slast) (set! slast now)
-          (Uint64.< now slast)
-            (do
-              (set! clock-seq (bit-or (bit-and (inc clock-seq) 16383) 32768))
-              (set! slast now))
-          (set! slast (Uint64.+ slast (Uint64.from-long 1l))))
-        slast)))
+      (let-do [reading (read-clock)]
+        (while (not (advance reading)) (set! reading (read-clock)))
+        (emitted))))
 
   ; TODO: actually get hardware interfaces (we’re only adhering to 4.5 here,
   ; generating random values)
@@ -264,10 +299,22 @@ scale `System.nanotime` uses.")
                   (Long.from-int (to-int @(unsafe-nth a @(unsafe-nth &order i))))))))
       ts))
 
+  ; the last timestamp whose Unix-epoch nanoseconds still fit in a `Uint64`.
+  (private max-nanotime)
+  (hidden max-nanotime)
+  (defn max-nanotime []
+    (Uint64.+ (gregorian-offset) (Uint64./ Uint64.MAX (Uint64.from-long 100l))))
+
   (doc to-nanotime "converts a version-1 or version-6 [timestamp](#timestamp)
-into nanoseconds since the Unix epoch, the scale `System.nanotime` uses.")
+into nanoseconds since the Unix epoch, the scale `System.nanotime` uses.
+
+Version-1 timestamps run from 1582 to 5236, so the conversion is a `Maybe`: it
+is `Nothing` outside 1970 to 2554-07-21, the range that scale covers.")
   (defn to-nanotime [ts]
-    (Uint64.* (Uint64.- ts (gregorian-offset)) (Uint64.from-long 100l))))
+    (if (or (Uint64.< ts (gregorian-offset)) (Uint64.> ts (max-nanotime)))
+      (Maybe.Nothing)
+      (Maybe.Just
+        (Uint64.* (Uint64.- ts (gregorian-offset)) (Uint64.from-long 100l))))))
 
 (defmodule UUID6
   (use-all Array Byte)

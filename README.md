@@ -29,7 +29,9 @@ You’ll then have access to the functions:
 * `UUID1.timestamp`, which extracts that 60-bit timestamp back out of a
   version-1 UUID (as a `Uint64`), and `UUID1.to-nanotime`, which converts such a
   timestamp to nanoseconds since the Unix epoch — the scale `System.nanotime`
-  uses, and the one you can compare against a wall clock.
+  uses, and the one you can compare against a wall clock. Version-1 timestamps
+  run from 1582 to 5236, so `to-nanotime` gives a `Maybe`, empty outside the
+  1970 to 2554 range that scale covers.
 * `UUID3.generate`, which generates a name-based UUID conforming to UUID
   version 3 (RFC 9562 §5.3): the MD5 hash of a namespace UUID followed by a
   name, truncated to 128 bits. Version 3 is specified over MD5, which is no
