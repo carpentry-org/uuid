@@ -9,7 +9,7 @@ for now.
 You’ll be able to pull in the library using:
 
 ```clojure
-(load "git@github.com:carpentry-org/uuid@0.0.7")
+(load "git@github.com:carpentry-org/uuid@0.1.0")
 ```
 
 You’ll then have access to the functions:
