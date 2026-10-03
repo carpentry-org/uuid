@@ -22,6 +22,9 @@ You’ll then have access to the functions:
   defined in RFC 9562 (§5.9 and §5.10), along with the `UUID.nil?` and
   `UUID.max?` predicates that test for them, and
 * `UUID4.generate`, which generates a random UUID, conforming to UUID version 4.
+  Its random bits, like those of versions 1, 6 and 7, come from the operating
+  system’s `getentropy`; if that fails, the program aborts rather than fall
+  back to a weaker generator.
 * `UUID1.generate`, which generates a time-based UUID conforming to UUID
   version 1: a 60-bit count of 100-nanosecond intervals since
   1582-10-15 00:00:00 UTC, a clock sequence, and a node. The node is always

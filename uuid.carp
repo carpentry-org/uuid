@@ -1,3 +1,5 @@
+(system-include "sys/random.h")
+
 (deftype UUID [internal (Array Byte)])
 (derive UUID =)
 
@@ -5,6 +7,23 @@
   (use-all Array Byte)
 
   (register xtob (Fn [String Int Int] Byte) "strtol")
+
+  (register getentropy (Fn [(Ptr Byte) Int] Int) "getentropy")
+  (private getentropy)
+  (hidden getentropy)
+
+  ; getentropy fills at most 256 bytes per call.
+  (hidden random-bytes)
+  (defn random-bytes [n]
+    (let-do [a (replicate n &0b)
+             p (unsafe-raw &a)]
+      (for [i 0 n 256]
+        (unless-do (= 0
+                      (getentropy (Pointer.add p (Long.from-int i))
+                                  (min 256 (- n i))))
+          (IO.errorln "UUID: getentropy failed")
+          (System.abort)))
+      a))
 
   (def rfc4122 1)
   (def reserved 2)
@@ -165,7 +184,7 @@ orders them by creation time, so they sort chronologically.")
 (defmodule UUID4
   (use-all Array Byte)
   (defn generate []
-    (let-do [a (repeat 16 &random)]
+    (let-do [a (UUID.random-bytes 16)]
       (aset! &a 6 (bit-or (bit-and @(unsafe-nth &a 6) 15b) 64b))
       (aset! &a 8 (bit-or (bit-and @(unsafe-nth &a 8) 63b) 128b))
       (UUID.init a))))
@@ -210,10 +229,11 @@ orders them by creation time, so they sort chronologically.")
   (defn set-clock-seq [seq]
     (do
       (when (= seq -1)
-        (set! seq
-              (bit-or
-                (bit-shift-left (to-int (Byte.random)) 8)
-                (to-int (Byte.random)))))
+        (let [r (UUID.random-bytes 2)]
+          (set! seq
+                (bit-or
+                  (bit-shift-left (to-int @(unsafe-nth &r 0)) 8)
+                  (to-int @(unsafe-nth &r 1))))))
       (let-do [old clock-seq]
         (set! clock-seq (bit-or (bit-and seq 16383) 32768))
         (when-do (/= old clock-seq)
@@ -269,7 +289,7 @@ when the clock actually steps backwards.")
   ; generating random values)
   (defn generate []
     (let-do [t (get-time)
-             a (allocate 16)]
+             a (UUID.random-bytes 16)]
       (aset! &a 0 (byte-at t 24))
       (aset! &a 1 (byte-at t 16))
       (aset! &a 2 (byte-at t 8))
@@ -280,7 +300,6 @@ when the clock actually steps backwards.")
       (aset! &a 7 (byte-at t 48))
       (aset! &a 8 (from-int (bit-and (bit-shift-right clock-seq 8) 255)))
       (aset! &a 9 (from-int (bit-and clock-seq 255)))
-      (for [i 0 6] (aset! &a (+ 10 i) (random)))
       (aset! &a 10 (bit-or @(unsafe-nth &a 10) 1b))
       (UUID.init a)))
 
@@ -402,11 +421,12 @@ version nibble stripped. `UUID1.to-nanotime` puts it back on the Unix scale
   (private next-seed)
   (hidden next-seed)
   (defn next-seed []
-    (Int.bit-and
-      (Int.bit-or
-        (Int.bit-shift-left (to-int (Byte.random)) 8)
-        (to-int (Byte.random)))
-      2047))
+    (let [r (UUID.random-bytes 2)]
+      (Int.bit-and
+        (Int.bit-or
+          (Int.bit-shift-left (to-int @(unsafe-nth &r 0)) 8)
+          (to-int @(unsafe-nth &r 1)))
+        2047)))
 
   ; the byte at bit offset `shift` of the `Uint64` `n`. `shift` is a small `Int`,
   ; so the masked value is in [0, 255] and survives the conversion through `Long`.
@@ -433,7 +453,7 @@ generated within the same millisecond.")
           (when-do (Int.> counter 4095)
             (set! last-ms (Uint64.+ last-ms (Uint64.from-long 1l)))
             (set! counter (next-seed)))))
-      (let-do [a (repeat 16 &random)]
+      (let-do [a (UUID.random-bytes 16)]
         (for [i 0 6] (aset! &a i (byte-at last-ms (Int.* 8 (Int.- 5 i)))))
         (aset! &a
                6
@@ -441,10 +461,7 @@ generated within the same millisecond.")
                  (Int.bit-or 112
                              (Int.bit-and (Int.bit-shift-right counter 8) 15))))
         (aset! &a 7 (Byte.from-int (Int.bit-and counter 255)))
-        (aset! &a
-               8
-               (Byte.from-int
-                 (Int.bit-or 128 (Int.bit-and (to-int (Byte.random)) 63))))
+        (aset! &a 8 (bit-or (bit-and @(unsafe-nth &a 8) 63b) 128b))
         (UUID.init a))))
 
   (doc timestamp "extracts the 48-bit Unix millisecond timestamp from a
