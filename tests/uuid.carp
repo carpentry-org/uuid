@@ -278,6 +278,33 @@
     &(UUID3.generate &(UUID.namespace-dns) "www.example.com")
     &(UUID5.generate &(UUID.namespace-dns) "www.example.com")))
 
+(defn distinct-count [n gen]
+  (let-do [seen (the (Set UUID) (Set.create))]
+    (for [i 0 n] (Set.put! &seen &(~gen)))
+    (Set.length &seen)))
+
+(defn all-well-formed? [n gen v]
+  (let-do [ok true]
+    (for [i 0 n]
+      (let [u (~gen)]
+        (unless (and (Byte.= v (UUID.version &u))
+                     (Int.= UUID.rfc4122 (UUID.variant &u)))
+          (set! ok false))))
+    ok))
+
+; a fresh v7 UUID with bytes 0 to 7 cleared, leaving its 62 random bits.
+(defn v7-tail []
+  (let-do [a @(UUID.internal &(UUID7.generate))]
+    (for [i 0 8] (Array.aset! &a i 0b))
+    (UUID.init a)))
+
+(defn zeroes-past-first-chunk []
+  (let-do [a (UUID.random-bytes 1000)
+           zeroes 0]
+    (for [i 256 1000]
+      (when (Byte.= 0b @(Array.unsafe-nth &a i)) (set! zeroes (Int.inc zeroes))))
+    zeroes))
+
 (deftest test
   (assert-equal test
     "00010203-0405-0607-0809-0a0b0c0d0e0f"
@@ -288,6 +315,16 @@
     UUID.rfc4122
     (variant &(UUID4.generate))
     "UUID4.generate works II")
+  (assert-equal test
+    10000
+    (distinct-count 10000 &UUID4.generate)
+    "10000 UUID4s are pairwise distinct")
+  (assert-true test
+    (all-well-formed? 10000 &UUID4.generate 4b)
+    "every UUID4 carries version 4 and the RFC 4122 variant")
+  (assert-true test
+    (< (zeroes-past-first-chunk) 100)
+    "UUID.random-bytes fills buffers past getentropy’s 256-byte limit")
   (assert-equal test 1b (version &(UUID1.generate)) "UUID1.generate works I")
   (assert-equal test
     UUID.rfc4122
@@ -378,6 +415,13 @@
   (assert-true test
     (v7-timestamp-close?)
     "UUID7.timestamp round-trips to within a second of now")
+  (assert-equal test
+    10000
+    (distinct-count 10000 &v7-tail)
+    "10000 UUID7s have pairwise distinct random tails")
+  (assert-true test
+    (all-well-formed? 10000 &UUID7.generate 7b)
+    "every UUID7 carries version 7 and the RFC 4122 variant")
   (assert-equal test
     6b
     (version &(UUID6.generate))
