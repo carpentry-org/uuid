@@ -392,6 +392,10 @@
     &(parse "00010203-0405-0607-0809-0a0b0c0d0e0f")
     "parsing works I")
   (assert-equal test &(Maybe.Nothing) &(parse "invalid hex") "parsing works II")
+  (assert-equal test
+    &(Maybe.Just (v1-vector))
+    &(parse "C232AB00-9414-11EC-B3C8-9F6BDECED846")
+    "an upper-case UUID parses to the same value as its lower-case spelling")
   (assert-false test
     (valid? "prefix00000000-0000-0000-0000-000000000000")
     "prefixed UUID is rejected")
