@@ -6,8 +6,6 @@
 (defmodule UUID
   (use-all Array Byte)
 
-  (register xtob (Fn [String Int Int] Byte) "strtol")
-
   (register getentropy (Fn [(Ptr Byte) Int] Int) "getentropy")
   (private getentropy)
   (hidden getentropy)
@@ -161,19 +159,27 @@ orders them by creation time, so they sort chronologically.")
   (private indices)
   (hidden indices)
 
+  (private nibble)
+  (hidden nibble)
+  (defn nibble [c]
+    (let [n (Char.to-int c)]
+      (Byte.from-int
+        (cond
+          (Char.num? c) (- n (Char.to-int \0))
+          (Char.upper-case? c) (+ 10 (- n (Char.to-int \A)))
+          (+ 10 (- n (Char.to-int \a)))))))
+
   (doc parse "parses a string into a `UUID`; returns nothing if it fails.")
   (defn parse [s]
     (if (valid? s)
       (let-do [a (replicate 16 &0b)]
         (for [i 0 (length &indices)]
-          (aset! &a
-                 i
-                 (xtob
-                   (slice s
-                          @(unsafe-nth &indices i)
-                          (+ @(unsafe-nth &indices i) 2))
-                   0
-                   16)))
+          (let [j @(unsafe-nth &indices i)]
+            (aset! &a
+                   i
+                   (bit-or
+                     (bit-shift-left (nibble (String.char-at s j)) 4b)
+                     (nibble (String.char-at s (+ j 1)))))))
         (Maybe.Just (UUID.init a)))
       (Maybe.Nothing))))
 
